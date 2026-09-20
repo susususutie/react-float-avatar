@@ -115,6 +115,21 @@ export function validateAnchor(
   };
 }
 
+/** 把元素左上角夹紧到视口内：拖拽跟随与落点结算共用同一套边界 */
+export function clampToViewport(
+  left: number,
+  top: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  elementWidth: number,
+  elementHeight: number,
+): XY {
+  return {
+    left: Math.max(0, Math.min(left, viewportWidth - elementWidth)),
+    top: Math.max(0, Math.min(top, viewportHeight - elementHeight)),
+  };
+}
+
 function defaultAnchor(padding: number): EdgeAnchor {
   return {
     horizontal: { edge: "right", offset: padding },
@@ -170,7 +185,8 @@ export function saveAnchor(storageKey: string, anchor: EdgeAnchor): void {
   }
 }
 
-function isSameAnchor(a: EdgeAnchor, b: EdgeAnchor): boolean {
+/** 两个锚点是否完全一致（包含锚定边与 offset） */
+export function isSameAnchor(a: EdgeAnchor, b: EdgeAnchor): boolean {
   return (
     a.horizontal.edge === b.horizontal.edge &&
     a.horizontal.offset === b.horizontal.offset &&

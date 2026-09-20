@@ -81,7 +81,8 @@ export default function AdminLayout() {
           <Outlet />
         </Content>
       </Layout>
-      <FloatingAvatar onClick={() => console.log("AI avatar clicked")} />
+      {/* mask="drag"：拖拽中显示锚定边、吸附范围与落点预览（演示用，改成 "off" 即关闭） */}
+      <FloatingAvatar mask="drag" onClick={() => console.log("AI avatar clicked")} />
     </Layout>
   );
 }

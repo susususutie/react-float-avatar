@@ -1,91 +1,90 @@
 /**
- * snapToCorner — 四角吸附判定（纯函数）
+ * snapToCorner — 四角吸附（纯函数）
  *
- * 落点距某个角落的目标位置不超过 threshold 时，返回该角的锚点（offset = padding）；
- * 否则返回 null，表示保持自由落点。
+ * cornerTargets() 是四角目标位置与锚点的唯一来源：吸附判定和拖拽遮罩都从它取几何，
+ * 避免「画出来的吸附范围」与「真实触发范围」出现分歧。
  */
 
-import type { EdgeAnchor } from "./useEdgeAnchor";
+import type { EdgeAnchor, XY } from "./useEdgeAnchor";
 
-export interface SnapToCornerOptions {
-  /** 落点：元素左上角绝对坐标 */
-  left: number;
-  top: number;
+export interface CornerTargetOptions {
   viewportWidth: number;
   viewportHeight: number;
   elementWidth: number;
   elementHeight: number;
-  /** 触发吸附的最大距离（px） */
-  threshold: number;
   /** 吸附后元素距视口边缘的间距（px） */
   padding: number;
 }
 
-interface Corner {
-  left: number;
-  top: number;
+export interface CornerTarget {
+  /** 角落目标位置：元素左上角坐标 */
+  position: XY;
   anchor: EdgeAnchor;
 }
 
-export function snapToCorner({
-  left,
-  top,
+export interface SnapToCornerOptions extends CornerTargetOptions {
+  /** 落点：元素左上角绝对坐标 */
+  left: number;
+  top: number;
+  /** 触发吸附的最大距离（px） */
+  threshold: number;
+}
+
+/** 四个角落的目标位置与锚点（左上、右上、左下、右下） */
+export function cornerTargets({
   viewportWidth,
   viewportHeight,
   elementWidth,
   elementHeight,
-  threshold,
   padding,
-}: SnapToCornerOptions): EdgeAnchor | null {
-  const leftOffset = padding;
-  const rightOffset = viewportWidth - elementWidth - padding;
-  const topOffset = padding;
-  const bottomOffset = viewportHeight - elementHeight - padding;
-
-  const corners: Corner[] = [
+}: CornerTargetOptions): CornerTarget[] {
+  const right = viewportWidth - elementWidth - padding;
+  const bottom = viewportHeight - elementHeight - padding;
+  return [
     {
-      left: leftOffset,
-      top: topOffset,
+      position: { left: padding, top: padding },
       anchor: {
         horizontal: { edge: "left", offset: padding },
         vertical: { edge: "top", offset: padding },
       },
     },
     {
-      left: rightOffset,
-      top: topOffset,
+      position: { left: right, top: padding },
       anchor: {
         horizontal: { edge: "right", offset: padding },
         vertical: { edge: "top", offset: padding },
       },
     },
     {
-      left: leftOffset,
-      top: bottomOffset,
+      position: { left: padding, top: bottom },
       anchor: {
         horizontal: { edge: "left", offset: padding },
         vertical: { edge: "bottom", offset: padding },
       },
     },
     {
-      left: rightOffset,
-      top: bottomOffset,
+      position: { left: right, top: bottom },
       anchor: {
         horizontal: { edge: "right", offset: padding },
         vertical: { edge: "bottom", offset: padding },
       },
     },
   ];
+}
 
-  let closest = corners[0];
+/** 落点距某个角落目标点不超过 threshold 时返回该角锚点，否则返回 null（保持自由落点） */
+export function snapToCorner(options: SnapToCornerOptions): EdgeAnchor | null {
+  const { left, top, threshold } = options;
+
+  let closest: CornerTarget | null = null;
   let closestDistance = Infinity;
-  for (const corner of corners) {
-    const distance = Math.hypot(corner.left - left, corner.top - top);
+  for (const target of cornerTargets(options)) {
+    const distance = Math.hypot(target.position.left - left, target.position.top - top);
     if (distance < closestDistance) {
-      closest = corner;
+      closest = target;
       closestDistance = distance;
     }
   }
 
-  return closestDistance <= threshold ? closest.anchor : null;
+  return closest && closestDistance <= threshold ? closest.anchor : null;
 }

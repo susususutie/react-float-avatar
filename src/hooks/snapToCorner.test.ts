@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { snapToCorner } from "./snapToCorner";
+import { cornerTargets, snapToCorner } from "./snapToCorner";
 import { anchorToXY } from "./useEdgeAnchor";
 
 const BASE = {
@@ -12,6 +12,23 @@ const BASE = {
 };
 
 const BOTTOM_RIGHT = { left: 1440 - 56 - 24, top: 900 - 56 - 24 };
+
+describe("cornerTargets", () => {
+  it("四个角落的目标点与锚点一一对应，且与 anchorToXY 一致", () => {
+    const targets = cornerTargets({ ...BASE });
+
+    expect(targets.map((target) => target.anchor)).toEqual([
+      { horizontal: { edge: "left", offset: 24 }, vertical: { edge: "top", offset: 24 } },
+      { horizontal: { edge: "right", offset: 24 }, vertical: { edge: "top", offset: 24 } },
+      { horizontal: { edge: "left", offset: 24 }, vertical: { edge: "bottom", offset: 24 } },
+      { horizontal: { edge: "right", offset: 24 }, vertical: { edge: "bottom", offset: 24 } },
+    ]);
+    for (const target of targets) {
+      expect(anchorToXY(target.anchor, 1440, 900, 56, 56)).toEqual(target.position);
+    }
+    expect(targets[3].position).toEqual(BOTTOM_RIGHT);
+  });
+});
 
 describe("snapToCorner", () => {
   it("远离四角时保持自由落点", () => {

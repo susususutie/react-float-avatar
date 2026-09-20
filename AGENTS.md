@@ -57,12 +57,15 @@ src/
   index.css            html/body/root: height 100%, overflow hidden
   components/
     AdminLayout.tsx    antd Layout（固定 100vh，深色 Header 用 darkAlgorithm）
+    AnchorMask.tsx     拖拽期锚定可视化遮罩（纯展示，几何全部外部传入）
     FloatingAvatar.tsx 核心功能：拖拽 + 边缘锚定 + 吸附 + 持久化
     avatar.png         AI 助手头像图片
   hooks/
     useDraggable.ts    pointer events，只报告拖拽增量（含 pointercancel 取消）
     useEdgeAnchor.ts   锚点语义：换算 / 校验 / 持久化 + useEdgeAnchor（含同名 .test.ts）
-    snapToCorner.ts    四角吸附判定（纯函数，含同名 .test.ts）
+    snapToCorner.ts    四角目标点 + 吸附判定（纯函数，含同名 .test.ts）
+    resolveDrop.ts     落点决策：夹紧 + 吸附 + 反算锚点（纯函数，含同名 .test.ts）
+    useViewportSize.ts 视口尺寸（窗口缩放时更新）
   pages/               Home、About、Dashboard（简单内容页）
 ```
 
@@ -82,11 +85,13 @@ CSS 属性名镜像锚定边：
 ### 拖拽用 transform，松手一次性提交
 
 - **拖拽中**：元素保持原有 CSS 定位不动，`transform: translate(dx, dy)` 实现视觉移动（GPU 合成，不触发 layout）
-- **松手时**：把落点换算成锚点，并在**同一次提交**里把 `transform` 清零；锚点能精确还原落点，所以非吸附落点的视觉位置不会变化，不需要任何补偿 transform
-- **吸附**：落点距角落不超过 `SNAP_THRESHOLD` 时按 `snapToCorner()` 落到角落，这里的位移是预期行为
+- **松手时**：用 `resolveDrop()` 把落点换算成锚点，并在**同一次提交**里把 `transform` 清零；锚点能精确还原落点，所以非吸附落点的视觉位置不会变化，不需要任何补偿 transform
+- **吸附**：落点距角落目标点不超过 `SNAP_THRESHOLD` 时落到该角，这里的位移是预期行为
 - **点击**：位移小于 `CLICK_THRESHOLD` 时不落锚点，元素回到拖拽前的位置
 
 **关键**：`anchorToXY()` 与 `xyToAnchor()` 必须严格互逆（`anchorToXY(xyToAnchor(left, top)) === (left, top)`）。一旦不互逆，松手后元素会整体偏移半个自身尺寸——这正是历史上出现过的 bug，`src/hooks/useEdgeAnchor.test.ts` 覆盖了该不变量。
+
+**关键**：落点决策只有 `resolveDrop()` 一处。拖拽预览和真实落锚必须调用它，不要在组件里另写一遍夹紧/吸附/换算，否则遮罩会画出一个元素最终不会去的位置。
 
 ### 锚点状态统一由 useEdgeAnchor 管理
 
@@ -95,9 +100,21 @@ CSS 属性名镜像锚定边：
 ### 位置合法性校验
 
 - `validateAnchor()`：加载时和窗口缩放时将偏移量夹紧到视口范围内（在 `useEdgeAnchor` 内）
-- `clampToViewport()`：拖拽过程中约束坐标不超出视口（在 `FloatingAvatar` 内）
+- `clampToViewport()`：拖拽跟随时约束坐标不超出视口，`resolveDrop()` 落点结算也用它（在 `useEdgeAnchor` 内）
 
 两者缺一不可，否则窗口缩放后头像可能跑到视口外。
+
+### 锚定可视化遮罩（AnchorMask）
+
+「边锚定 + 四角吸附」规则本身不可见，容易被误判成拖动定位不准，所以有一层可选的解释层：
+
+- `mask`：`"off"`（默认）/ `"drag"`（仅拖拽中，`AdminLayout` 演示用这个）/ `"always"`（常驻，适合讲解）
+- `maskOptions`：`snapZone`（吸附范围）、`anchorEdges`（锚定边 + offset 标尺）、`flipLine`（锚定边翻面中线）、`releasePreview`（松手落点幽灵圈）、`debug`（调试面板，默认 `import.meta.env.DEV`）
+- `maskClassName` / `maskStyle`：样式逃生口；不要在 `maskStyle` 里改 `pointerEvents`，那会让遮罩挡住头像的命中区域
+
+画出来的东西：四角吸附范围是**虚线圆**（半径 `threshold`，圆心是角落目标点，元素中心进圈即命中，见 `cornerTargets()`）；中线是锚定边翻面位置（元素中心越过视口中线后 `left`/`right` 互换）；幽灵圈是松手后的真实落点，吸附命中时会跳到角落并用引线连回元素。
+
+`"drag"` 模式下遮罩随拖拽挂载/卸载：拖拽中的每一帧 `FloatingAvatar` 用 `resolveDrop()` 算出 pending 锚点并传给遮罩，非拖拽状态下则由已提交锚点推出来。
 
 ## 注意事项
 

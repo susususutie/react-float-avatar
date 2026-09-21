@@ -192,15 +192,15 @@ describe("复杂消息（带 title / avatar / footer）", () => {
     expect(actionButtons).toEqual([]);
   });
 
-  it("关闭图标用 close.svg 原尺寸，并按内边距贴右上角（距上 11 / 距右 14 的按钮盒）", () => {
+  it("关闭图标是内联 svg（原尺寸 12），并按内边距贴右上角（距上 11 / 距右 14 的按钮盒）", () => {
     const { closeButton } = renderBubble(COMPLEX_MESSAGE);
-    const icon = closeButton?.querySelector("img") as HTMLImageElement;
+    const icon = closeButton?.querySelector("svg") as SVGElement;
 
     expect(closeButton?.style.top).toBe("11px");
     expect(closeButton?.style.right).toBe("14px");
-    expect(icon.width).toBe(12);
-    expect(icon.height).toBe(12);
-    expect(icon.getAttribute("src")).toContain("svg");
+    expect(icon.getAttribute("width")).toBe("12");
+    expect(icon.getAttribute("height")).toBe("12");
+    expect(icon.getAttribute("viewBox")).toBe("0 0 12 12");
   });
 
   it("关闭按钮点击后回调 onClose", async () => {

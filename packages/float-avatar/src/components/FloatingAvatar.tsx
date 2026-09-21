@@ -20,7 +20,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Badge } from "antd";
-import avatarImg from "./avatar.png";
 import AnchorMask from "./AnchorMask";
 import type { AnchorMaskMode, AnchorMaskOptions, DragPreview } from "./AnchorMask";
 import AvatarBubble from "./AvatarBubble";
@@ -39,7 +38,9 @@ const STORAGE_KEY = "ai-assistant-position";
 /** 拖拽位移；零偏移复用同一个对象，让 React 直接跳过重渲染 */
 const NO_OFFSET = { x: 0, y: 0 };
 
-interface FloatingAvatarProps {
+export interface FloatingAvatarProps {
+  /** 头像图片地址（由使用方提供，库不内置默认头像） */
+  avatarSrc: string;
   /** 位移小于 CLICK_THRESHOLD 的松手算点击，回调在这里触发 */
   onClick?: () => void;
   /** 松手时是否吸附到最近的四角 */
@@ -55,6 +56,7 @@ interface FloatingAvatarProps {
 }
 
 export default function FloatingAvatar({
+  avatarSrc,
   onClick,
   snapToCorner: snapEnabled = true,
   mask = "off",
@@ -213,7 +215,7 @@ export default function FloatingAvatar({
         <Badge dot={badgeVisible} offset={[-4, 4]}>
           <span style={{ display: "block", width: ELEMENT_SIZE, height: ELEMENT_SIZE }}>
             <img
-              src={avatarImg}
+              src={avatarSrc}
               alt="AI 助手"
               draggable={false}
               style={{

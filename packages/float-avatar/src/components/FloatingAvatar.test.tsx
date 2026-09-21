@@ -19,6 +19,7 @@ installDomShims();
 
 const STORAGE_KEY = "ai-assistant-position";
 const VIEWPORT = { width: 1440, height: 813 };
+const AVATAR_SRC = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
 /** 默认锚点 right/bottom 24 → 头像左上角 */
 const AVATAR_ORIGIN = { left: VIEWPORT.width - 56 - 24, top: VIEWPORT.height - 56 - 24 };
 
@@ -91,7 +92,7 @@ afterEach(() => {
 
 describe("拖拽与锚点持久化", () => {
   it("松手后按锚点语义写入 localStorage（右/下边距）", () => {
-    renderAvatar(<FloatingAvatar />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
 
     dragBy(-300, -180);
 
@@ -103,7 +104,7 @@ describe("拖拽与锚点持久化", () => {
   });
 
   it("落点靠近角落时吸附到角落（snapToCorner 默认开启）", () => {
-    renderAvatar(<FloatingAvatar />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
 
     // 从默认位置往上拖 700px 后落在 (1360, 33)，距右上角目标(1360,24)很近 → 吸附
     dragBy(0, -700);
@@ -116,7 +117,7 @@ describe("拖拽与锚点持久化", () => {
 
   it("位移小于点击阈值算点击：位置不变且触发 onClick", () => {
     const onClick = vi.fn();
-    renderAvatar(<FloatingAvatar onClick={onClick} />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} onClick={onClick} />);
     const before = localStorage.getItem(STORAGE_KEY);
 
     dragBy(3, 1);
@@ -128,7 +129,7 @@ describe("拖拽与锚点持久化", () => {
 
 describe("消息气泡与红点", () => {
   it("消息由 avatarMessage 单例驱动：show 出现、close 卸载", async () => {
-    renderAvatar(<FloatingAvatar />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
     expect(bubbleElement()).toBeNull();
 
     act(() => {
@@ -143,7 +144,7 @@ describe("消息气泡与红点", () => {
   });
 
   it("拖拽中隐藏气泡、松手后恢复", () => {
-    renderAvatar(<FloatingAvatar />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
     act(() => {
       avatarMessage.show("拖拽中要隐藏");
     });
@@ -164,7 +165,7 @@ describe("消息气泡与红点", () => {
   });
 
   it("红点由 avatarBadge 手动控制", () => {
-    renderAvatar(<FloatingAvatar />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
     expect(visibleBadgeDot()).toBeNull();
 
     act(() => {
@@ -179,10 +180,10 @@ describe("消息气泡与红点", () => {
   });
 
   it('遮罩默认关闭，mask="always" 时才渲染', () => {
-    renderAvatar(<FloatingAvatar />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
     expect(container.querySelector("[data-anchor-mask]")).toBeNull();
 
-    renderAvatar(<FloatingAvatar mask="always" />);
+    renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} mask="always" />);
     expect(container.querySelector("[data-anchor-mask]")).not.toBeNull();
   });
 });

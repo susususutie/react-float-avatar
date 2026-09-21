@@ -177,6 +177,18 @@ overrides:
 importers:
 
   .:
+    devDependencies:
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: '@voidzero-dev/vite-plus-core@0.3.1(@types/node@24.13.6)(typescript@6.0.3)'
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.3.1(@types/node@24.13.6)(jsdom@30.1.0)(typescript@6.0.3)
+
+  apps/admin:
     dependencies:
       '@ant-design/icons':
         specifier: ^6.3.4
@@ -184,6 +196,9 @@ importers:
       antd:
         specifier: ^6.6.4
         version: 6.6.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      float-avatar:
+        specifier: workspace:*
+        version: link:../../packages/float-avatar
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -206,9 +221,42 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.1
         version: 6.1.1(@voidzero-dev/vite-plus-core@0.3.1(@types/node@24.13.6)(typescript@6.0.3))
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: '@voidzero-dev/vite-plus-core@0.3.1(@types/node@24.13.6)(typescript@6.0.3)'
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.3.1(@types/node@24.13.6)(jsdom@30.1.0)(typescript@6.0.3)
+
+  packages/float-avatar:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.6
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: ^6.1.1
+        version: 6.1.1(@voidzero-dev/vite-plus-core@0.3.1(@types/node@24.13.6)(typescript@6.0.3))
+      antd:
+        specifier: ^6.6.4
+        version: 6.6.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       jsdom:
         specifier: ^30.1.0
         version: 30.1.0
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.3.0
+        version: 19.3.0(react@19.3.0)
       typescript:
         specifier: ~6.0.2
         version: 6.0.3

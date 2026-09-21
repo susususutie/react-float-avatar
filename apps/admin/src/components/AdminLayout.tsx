@@ -1,9 +1,10 @@
+import { FloatingAvatar } from "float-avatar";
 import { useState } from "react";
 import { Layout, Menu, theme } from "antd";
 import { HomeOutlined, InfoCircleOutlined, DashboardOutlined } from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import type { MenuProps } from "antd";
-import FloatingAvatar from "./FloatingAvatar";
+import avatarImg from "../assets/avatar.png";
 
 const { Header, Sider, Content } = Layout;
 
@@ -82,7 +83,12 @@ export default function AdminLayout() {
         </Content>
       </Layout>
       {/* mask="drag"：拖拽中显示锚定边、吸附范围与落点预览（演示用，改成 "off" 即关闭） */}
-      <FloatingAvatar mask="drag" onClick={() => console.log("AI avatar clicked")} />
+      {/* mask="drag"：拖拽中显示锚定边、吸附范围与落点预览（演示用，改成 "off" 即关闭） */}
+      <FloatingAvatar
+        avatarSrc={avatarImg}
+        mask="drag"
+        onClick={() => console.log("AI avatar clicked")}
+      />
     </Layout>
   );
 }

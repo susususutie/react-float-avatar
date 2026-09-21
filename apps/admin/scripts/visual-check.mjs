@@ -5,11 +5,12 @@
  * 而字体渲染、antd CSS、真实布局下的右对齐与尾巴间距必须在浏览器里量。
  *
  * 用法：
- *   vp dev                      # 另开终端，默认 http://localhost:5174
- *   node scripts/visual-check.mjs
- *   node scripts/visual-check.mjs --url http://localhost:5174/ --shots /tmp/bubble-shots
+ *   vp run admin#dev            # 另开终端（工作区根也可用 vp run dev）
+ *   node apps/admin/scripts/visual-check.mjs
+ *   node apps/admin/scripts/visual-check.mjs --url http://localhost:5173/ --shots /tmp/shots
  *
  * 说明：用一次性 headless Chrome + 临时 profile，不触碰已打开的浏览器；
+ * 默认按 5173 / 5174 / 5175 探测本地 dev server，也可用 --url 指定；
  * 任一项超差即非零退出，可直接挂在本地验收流程里。
  */
 
@@ -32,13 +33,31 @@ const readArg = (name, fallback) => {
   return index >= 0 ? args[index + 1] : fallback;
 };
 
-const APP_URL = readArg("--url", "http://localhost:5174/");
 const CHROME_PATH = readArg(
   "--chrome",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 );
 const SHOTS_DIR = readArg("--shots", null);
+const PORT_CANDIDATES = [5173, 5174, 5175];
 const VIEWPORT = { width: 1440, height: 900 };
+
+/** 没显式给 --url 时，按候选端口探测本地 dev server */
+async function resolveAppUrl() {
+  const explicit = readArg("--url", null);
+  if (explicit) return explicit;
+  for (const port of PORT_CANDIDATES) {
+    const url = `http://localhost:${port}/`;
+    try {
+      await fetch(url, { method: "HEAD" });
+      return url;
+    } catch {
+      /* 试下一个端口 */
+    }
+  }
+  throw new Error(
+    `没找到本地 dev server（试过 ${PORT_CANDIDATES.join(" / ")}），先跑 vp run admin#dev，或用 --url 指定`,
+  );
+}
 
 if (!existsSync(CHROME_PATH)) {
   console.error(`找不到 Chrome：${CHROME_PATH}\n用 --chrome <path> 指定。`);
@@ -101,7 +120,7 @@ const HELPERS = `
     const card = bubble.firstElementChild;
     const title = card.querySelector("[data-bubble-title]");
     const content = card.querySelector("[data-bubble-content]");
-    const closeImg = card.querySelector('button[aria-label="关闭消息"] img');
+    const closeImg = card.querySelector('button[aria-label="关闭消息"] svg');
     const buttons = [...card.querySelectorAll("button")].filter(
       (button) => button.getAttribute("aria-label") !== "关闭消息",
     );
@@ -156,6 +175,8 @@ let ws;
 let chrome;
 
 try {
+  const APP_URL = await resolveAppUrl();
+  const appPort = new URL(APP_URL).port;
   chrome = spawn(
     CHROME_PATH,
     [
@@ -176,11 +197,11 @@ try {
     const list = await fetch(`http://127.0.0.1:${port}/json/list`)
       .then((response) => response.json())
       .catch(() => []);
-    page = list.find((target) => target.type === "page" && target.url.includes("5174"));
+    page = list.find((target) => target.type === "page" && target.url.includes(appPort));
     if (page?.webSocketDebuggerUrl) break;
     await sleep(250);
   }
-  if (!page) throw new Error(`打不开页面：${APP_URL}（先跑 vp dev？）`);
+  if (!page) throw new Error(`打不开页面：${APP_URL}（先跑 vp run admin#dev？）`);
 
   ws = new WebSocket(page.webSocketDebuggerUrl);
   let id = 0;

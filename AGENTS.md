@@ -31,54 +31,62 @@ release. Add a tool name to select part of the graph. For example, run
 ## 项目概述
 
 React 19 + antd v6 + react-router-dom v7 的 Web AI 助手浮动头像 POC。
-单包 Vite+ 项目（非 monorepo）。
+Vite+ 工作区（pnpm workspace），两个子包：
+
+- `packages/float-avatar`：可独立发布的组件库（`vp create vite:library` 的产物），peer 依赖只有 `react` + `antd`
+- `apps/admin`：后台应用（`vp create vite:application` 的产物），既是库的消费者，也是开发/预览/调试的宿主
 
 ## 常用命令
 
 ```bash
-vp install        # 拉取代码后安装依赖
-vp check          # 格式化 + lint + 类型检查（提交前必跑）
-vp check --fix    # 自动修复格式和 lint 问题
-vp test           # 运行单元测试（vitest，测试文件与被测模块同目录）
-vp run build      # tsc -b && vp build（先类型检查再构建）
-vp dev            # 启动开发服务器
+vp install               # 拉取代码后安装依赖（工作区根）
+vp check                 # 根配置统一格式化 + lint + 类型检查（提交前必跑，覆盖两个子包）
+vp check --fix           # 自动修复格式和 lint 问题
+vp run dev               # = vp run admin#dev，启动后台应用（开发/预览/调试都在这里）
+vp test                  # = vp run float-avatar#test，跑库的测试
+vp pack                  # = vp run float-avatar#build，构建库产物 dist + dts
+vp run -r build          # 两个子包都构建
+vp run visual-check      # 浏览器几何验收（需先起 dev server）
+vp run admin#build       # 只构建后台应用
+vp run float-avatar#dev  # 只监听库产物（平时不需要，dev 下应用直接读库源码）
 ```
 
-- **构建脚本**（`package.json`）：`tsc -b && vp build`，TypeScript 检查在 Vite 构建之前执行
-- **Lint 配置**（`vite.config.ts`）：插件 `react`、`typescript`、`oxc`，启用了 `typeAware: true, typeCheck: true`
-- **单 tsconfig**：无 project references；target/module/lib = esnext；jsx = react-jsx
+- **根配置**（`vite.config.ts`）：`staged` 提交钩子 + `fmt` + `lint`（插件 `react`/`typescript`/`oxc`，`typeAware: true, typeCheck: true`）。子包只保留自己的 dev/build/pack 配置，不重复抄 lint 规则。
+- **子包 tsconfig**：库为 bundler + DOM + `jsx: react-jsx`（`include: ["src"]`）；应用同构，`tsc -b && vp build`。
+- **路径约定**：下文的 `src/**` 指库内路径时位于 `packages/float-avatar/src/**`，指页面/应用时位于 `apps/admin/src/**`。
 
 ## 架构
 
 ```
-src/
-  App.tsx              路由配置（嵌套在 AdminLayout 下）
-  main.tsx             StrictMode + BrowserRouter + index.css
-  index.css            html/body/root: height 100%, overflow hidden
-  components/
-    AdminLayout.tsx    antd Layout（固定 100vh，深色 Header 用 darkAlgorithm）
-    AnchorMask.tsx     拖拽期锚定可视化遮罩（纯展示，几何全部外部传入）
-    AvatarBubble.tsx   头像消息气泡（定位 / 动效 / 倒计时 / 插槽，视觉取 antd token）
-    FloatingAvatar.tsx 核心功能：拖拽 + 边缘锚定 + 吸附 + 持久化
-    avatar.png         AI 助手头像图片
-  hooks/
-    avatarMessage.ts   消息与角标单例：状态 + 队列策略 + useAvatarState（含同名 .test.ts）
-    resolveBubblePlacement.ts 气泡定位：头顶优先 / 翻面 / 夹紧（纯函数，含同名 .test.ts）
-    useDraggable.ts    pointer events，只报告拖拽增量（含 pointercancel 取消）
-    useEdgeAnchor.ts   锚点语义：换算 / 校验 / 持久化 + useEdgeAnchor（含同名 .test.ts）
-    snapToCorner.ts    四角目标点 + 吸附判定（纯函数，含同名 .test.ts）
-    resolveDrop.ts     落点决策：夹紧 + 吸附 + 反算锚点（纯函数，含同名 .test.ts）
-    useViewportSize.ts 视口尺寸（窗口缩放时更新）
-  pages/               Home、About、Dashboard（简单内容页）
-  test/
-    domEnvironment.ts  UI 测试的 jsdom 补齐（matchMedia / ResizeObserver / animate / PointerEvent + 布局尺寸 stub）
-scripts/
-  visual-check.mjs     浏览器几何验收：在真实浏览器量取几何并比对预期表，漂移即非零退出
+package.json           工作区根：脚本 + 公共 devDeps（typescript / vite / vite-plus）
+pnpm-workspace.yaml    packages/* + apps/* + catalog
+vite.config.ts         根配置：staged 钩子 + fmt + lint
+packages/float-avatar/ 组件库（可发布）
+  package.json         peerDeps: react/antd；exports→src、publishConfig.exports→dist
+  vite.config.ts       pack（dts + exports.devExports）+ react 插件（.tsx 测试用）
+  src/index.ts         唯一对外出口：FloatingAvatar / avatarMessage / avatarBadge / useAvatarState / 类型
+  src/components/      FloatingAvatar / AvatarBubble / AnchorMask / CloseIcon（内联 svg）
+  src/hooks/           锚点、拖拽、吸附、落点、气泡定位、消息与角标、视口尺寸
+  src/test/            UI 测试的 jsdom 补齐（matchMedia / ResizeObserver / animate / PointerEvent + 布局尺寸 stub）
+apps/admin/            后台应用（库的消费者 + 预览宿主）
+  src/App.tsx          react-router 路由（嵌套在 AdminLayout 下）
+  src/components/      AdminLayout（antd Layout + 引入 <FloatingAvatar avatarSrc=… mask="drag" />）
+  src/pages/           Home、About、Dashboard（业务侧调用 avatarMessage 的示例）
+  src/assets/avatar.png 头像图片（库不内置默认头像，由应用传入）
+  scripts/visual-check.mjs 浏览器几何验收：真实浏览器量取几何并比对预期表，漂移即非零退出
 ```
+
+### 工作区与库边界
+
+- **开发即源码**：库 `exports` 指向 `src/index.ts`、`publishConfig.exports` 指向 `dist/index.mjs`（由 `vp pack` 的 `exports.devExports` 维护）。因此 `apps/admin` 在 dev 下直接把 `float-avatar` 解析到源码（可验证：dev server 里该模块 URL 是 `/@fs/…/packages/float-avatar/src/index.ts`），改库即热更，不需要 alias、也不需要 `vp pack --watch`。
+- **库不依赖应用**：库的 peer 依赖只有 `react` + `antd`；`react-router-dom`、`@ant-design/icons` 只允许出现在 `apps/admin`。要加新的应用侧依赖，加到 app，不要加到库。
+- **库不打包资源**：图标用内联组件（`CloseIcon`），头像由 `avatarSrc` prop 传入。新增图片/字体前先想清楚消费者怎么解析——优先内联或让调用方传入。
+- **对外只出 `src/index.ts`**：应用与外部一律 `import { … } from "float-avatar"`，不要深链库内部文件，否则重构内部结构就是破坏性变更。
+- **预览调试**：不需要额外的 playground，`apps/admin` 就是宿主——`vp run dev` 起应用，在页面里调 `avatarMessage.show(...)` 验证；`vp run visual-check` 做几何验收。
 
 ## FloatingAvatar 核心设计决策
 
-这是项目的核心功能。修改前务必先读 `src/components/FloatingAvatar.tsx` 和 `src/hooks/useEdgeAnchor.ts`。
+这是项目的核心功能。修改前务必先读 `packages/float-avatar/src/components/FloatingAvatar.tsx` 和 `packages/float-avatar/src/hooks/useEdgeAnchor.ts`。
 
 ### CSS 定位属性与锚定方向一致
 
@@ -125,7 +133,7 @@ CSS 属性名镜像锚定边：
 
 ### 头像消息与角标
 
-消息与红点都走 `src/hooks/avatarMessage.ts` 的单例，**不要在业务组件里另存一份消息状态**：
+消息与红点都走 `packages/float-avatar/src/hooks/avatarMessage.ts` 的单例，**不要在业务组件里另存一份消息状态**：
 
 ```ts
 avatarMessage.show("一行简单消息");          // 纯消息：直接传字符串（等价 { content: 字符串 }）
@@ -162,7 +170,7 @@ avatarBadge.show(); avatarBadge.hide(); avatarBadge.getState();
 - **间距按尾巴尖端算，且定位用贴头像那一侧**：尾巴方块旋转 45° 后尖端伸出卡片约 `12×√2/2 ≈ 8.5px`，所以传给 `resolveBubblePlacement()` 的 `gap` 是 `gap + ARROW_REACH`（默认视觉间距 16px）；返回的 `edgeOffset` 作用于「贴头像那一侧」（top 放置时给 `bottom`），这样间距不依赖气泡高度——内容变高时气泡朝远离头像的方向长，间距始终精确。历史上的 bug：只按卡片边缘算间距、又用 `top` 定位，实测只剩 ~1.9px，看着像贴住甚至重合。
 - **测量气泡尺寸必须用布局尺寸**（`offsetWidth/offsetHeight` + `clientHeight/scrollHeight`），**不要用 `getBoundingClientRect()`**：进出场动画给外层加了 `scale`，rect 会把缩放算进去（实测卡片 138px 量成 127px），水平对齐就按错误宽度算；而 transform 不改变布局尺寸、`ResizeObserver` 不会触发，错位会一直持续到下一次渲染。历史上「进入『关于』页右对齐超过头像、只有 `update` 后才对齐」就是这个原因。
 - 关闭按钮的图标是 `close.svg`（原型里的「缩小」图形，`fill-opacity 0.447` 正好等于 `colorIcon`）。它当前语义是关闭消息；若将来要做「收起（消息保留、可再展开）」需要额外加折叠态，另外它是 `<img>`，hover 不会变色。
-- **业务内容的块不进组件**：进度条、状态条这类自定义内容属于业务，直接写在页面里（示例见 `src/pages/Home.tsx` 的 `DemoProgress` / `DemoNote`），组件只提供插槽。原型里这两个块的量感作为页面侧参考：进度条高 6（**该行高度也锁 6**，否则 12px 百分比文字的 20px 行高会把卡片撑高 14px）、提示条高 32（上下 6px 内边距 + 3px 左强调条 + 只圆右侧两角 + 宽度按内容收缩）。
+- **业务内容的块不进组件**：进度条、状态条这类自定义内容属于业务，直接写在页面里（示例见 `apps/admin/src/pages/Home.tsx` 的 `DemoProgress` / `DemoNote`），组件只提供插槽。原型里这两个块的量感作为页面侧参考：进度条高 6（**该行高度也锁 6**，否则 12px 百分比文字的 20px 行高会把卡片撑高 14px）、提示条高 32（上下 6px 内边距 + 3px 左强调条 + 只圆右侧两角 + 宽度按内容收缩）。
 - **紧凑形态只看消息结构**：没有头像、没有标题、没有底部、正文是纯文本（字符串/数字）时走紧凑留白（`show("文本")` 就是这一档）；其余一律完整留白。不要引入「按内容长度」之类的隐式规则，也不要用「只有 title」表达一行文案。
 
 ### 测试与视觉回归（改渲染相关代码必看）
@@ -171,11 +179,11 @@ avatarBadge.show(); avatarBadge.hide(); avatarBadge.getState();
 
 1. **纯函数层**（`*.test.ts`，node 环境）：锚点互逆、落点决策、吸附几何、气泡定位、队列与顶掉规则、可见性与红点状态。
 2. **UI 渲染层**（`AvatarBubble.test.tsx` / `FloatingAvatar.test.tsx`，`// @vitest-environment jsdom`）：把渲染规格锁成断言——内边距、宽度上限、圆角、图标槽尺寸、标题/正文字号行高字重、关闭图标尺寸与位置、尾巴尺寸与位置、定位值、进出场动效参数、按钮语义、拖拽落锚写入的 anchor、拖拽期气泡隐藏、红点显隐。**这些断言是渲染规格的事实来源**：故意改样式时同步改断言，非故意改动时它们会失败，这正是要的效果。
-3. **浏览器几何验收**（`node scripts/visual-check.mjs`，需要 Chrome + `vp dev` 跑在 5174）：在真实浏览器里量取卡片矩形、字号字重、按钮、关闭图标、右对齐、尾巴间距等几何值并与预期表比对，任一项漂移就非零退出。像素/字体/antd CSS 这类 jsdom 测不到的东西靠这一层。
+3. **浏览器几何验收**（`vp run visual-check`，需要 Chrome + `vp run admin#dev`；脚本在 `apps/admin/scripts/visual-check.mjs`，默认探测 5173/5174/5175）：在真实浏览器里量取卡片矩形、字号字重、按钮、关闭图标、右对齐、尾巴间距等几何值并与预期表比对，任一项漂移就非零退出。像素/字体/antd CSS 这类 jsdom 测不到的东西靠这一层。
 
-jsdom 环境的补齐在 `src/test/domEnvironment.ts`（`jsdom` 是 devDependency，只在测试环境使用）：`matchMedia` / `ResizeObserver` / `Element.animate` / `PointerEvent` 的最小替身，以及 `stubLayout()`（写入假的 offsetWidth/offsetHeight/scrollHeight）和 `triggerResize()`（手动触发重新测量）。jsdom 不做真实布局，所以 UI 断言只断内联样式与结构，不断像素。
+jsdom 环境的补齐在 `packages/float-avatar/src/test/domEnvironment.ts`（`jsdom` 是库的 devDependency，只在测试环境使用）：`matchMedia` / `ResizeObserver` / `Element.animate` / `PointerEvent` 的最小替身，以及 `stubLayout()`（写入假的 offsetWidth/offsetHeight/scrollHeight）和 `triggerResize()`（手动触发重新测量）。jsdom 不做真实布局，所以 UI 断言只断内联样式与结构，不断像素。
 
-组件里给 DOM 自动化留了两个稳定钩子：标题 `data-bubble-title`、正文 `data-bubble-content`（`AvatarBubble.test.tsx` 与 `scripts/visual-check.mjs` 都靠它们定位，不要随手删）。
+组件里给 DOM 自动化留了两个稳定钩子：标题 `data-bubble-title`、正文 `data-bubble-content`（`AvatarBubble.test.tsx` 与 `apps/admin/scripts/visual-check.mjs` 都靠它们定位，不要随手删）。
 
 ## 注意事项
 

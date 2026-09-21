@@ -1,6 +1,6 @@
-import react from "@vitejs/plugin-react";
-import { defineConfig, lazyPlugins } from "vite-plus";
+import { defineConfig } from "vite-plus";
 
+// 工作区根配置：lint / fmt / 提交钩子对所有子包生效（子包只保留 dev/build/pack 这类自身配置）
 export default defineConfig({
   staged: {
     "*": "vp check --fix",
@@ -16,5 +16,4 @@ export default defineConfig({
     options: { typeAware: true, typeCheck: true },
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
   },
-  plugins: lazyPlugins(() => [react()]),
 });

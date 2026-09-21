@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Button, theme } from "antd";
-import closeIcon from "./close.svg";
+import CloseIcon from "./CloseIcon";
 import { anchorToXY } from "../hooks/useEdgeAnchor";
 import type { EdgeAnchor } from "../hooks/useEdgeAnchor";
 import { resolveBubblePlacement } from "../hooks/resolveBubblePlacement";
@@ -467,13 +467,7 @@ export default function AvatarBubble({
               cursor: "pointer",
             }}
           >
-            <img
-              src={closeIcon}
-              alt=""
-              width={CLOSE_ICON_SIZE}
-              height={CLOSE_ICON_SIZE}
-              style={{ display: "block" }}
-            />
+            <CloseIcon size={CLOSE_ICON_SIZE} />
           </button>
         ) : null}
       </div>

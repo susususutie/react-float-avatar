@@ -196,15 +196,15 @@ importers:
       antd:
         specifier: ^6.6.4
         version: 6.6.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      float-avatar:
-        specifier: workspace:*
-        version: link:../../packages/float-avatar
       react:
         specifier: ^19.3.0
         version: 19.3.0
       react-dom:
         specifier: ^19.3.0
         version: 19.3.0(react@19.3.0)
+      react-float-avatar:
+        specifier: workspace:*
+        version: link:../../packages/react-float-avatar
       react-router-dom:
         specifier: ^7.18.4
         version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -231,7 +231,7 @@ importers:
         specifier: 'catalog:'
         version: 0.3.1(@types/node@24.13.6)(jsdom@30.1.0)(typescript@6.0.3)
 
-  packages/float-avatar:
+  packages/react-float-avatar:
     devDependencies:
       '@types/node':
         specifier: ^24.13.3

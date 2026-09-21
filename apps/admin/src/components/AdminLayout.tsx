@@ -1,4 +1,4 @@
-import { FloatingAvatar } from "float-avatar";
+import { FloatingAvatar } from "react-float-avatar";
 import { useState } from "react";
 import { Layout, Menu, theme } from "antd";
 import { HomeOutlined, InfoCircleOutlined, DashboardOutlined } from "@ant-design/icons";

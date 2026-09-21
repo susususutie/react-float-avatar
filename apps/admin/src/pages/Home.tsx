@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { Button, Card, Space, theme, Typography } from "antd";
-import { avatarBadge, avatarMessage } from "float-avatar";
+import { avatarBadge, avatarMessage } from "react-float-avatar";
 import avatarImg from "../assets/avatar.png";
 
 const { Title, Paragraph } = Typography;

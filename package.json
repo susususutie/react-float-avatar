@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vp run admin#dev",
     "build": "vp run -r build",
-    "test": "vp run float-avatar#test",
-    "pack": "vp run float-avatar#build",
+    "test": "vp run react-float-avatar#test",
+    "pack": "vp run react-float-avatar#build",
     "visual-check": "node apps/admin/scripts/visual-check.mjs",
     "prepare": "vp config"
   },

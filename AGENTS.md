@@ -33,7 +33,7 @@ release. Add a tool name to select part of the graph. For example, run
 React 19 + antd v6 + react-router-dom v7 的 Web AI 助手浮动头像 POC。
 Vite+ 工作区（pnpm workspace），两个子包：
 
-- `packages/float-avatar`：可独立发布的组件库（`vp create vite:library` 的产物），peer 依赖只有 `react` + `antd`
+- `packages/react-float-avatar`：可独立发布的组件库（`vp create vite:library` 的产物），peer 依赖只有 `react` + `antd`
 - `apps/admin`：后台应用（`vp create vite:application` 的产物），既是库的消费者，也是开发/预览/调试的宿主
 
 ## 常用命令
@@ -43,17 +43,17 @@ vp install               # 拉取代码后安装依赖（工作区根）
 vp check                 # 根配置统一格式化 + lint + 类型检查（提交前必跑，覆盖两个子包）
 vp check --fix           # 自动修复格式和 lint 问题
 vp run dev               # = vp run admin#dev，启动后台应用（开发/预览/调试都在这里）
-vp test                  # = vp run float-avatar#test，跑库的测试
-vp pack                  # = vp run float-avatar#build，构建库产物 dist + dts
+vp test                  # = vp run react-float-avatar#test，跑库的测试
+vp pack                  # = vp run react-float-avatar#build，构建库产物 dist + dts
 vp run -r build          # 两个子包都构建
 vp run visual-check      # 浏览器几何验收（需先起 dev server）
 vp run admin#build       # 只构建后台应用
-vp run float-avatar#dev  # 只监听库产物（平时不需要，dev 下应用直接读库源码）
+vp run react-float-avatar#dev  # 只监听库产物（平时不需要，dev 下应用直接读库源码）
 ```
 
 - **根配置**（`vite.config.ts`）：`staged` 提交钩子 + `fmt` + `lint`（插件 `react`/`typescript`/`oxc`，`typeAware: true, typeCheck: true`）。子包只保留自己的 dev/build/pack 配置，不重复抄 lint 规则。
 - **子包 tsconfig**：库为 bundler + DOM + `jsx: react-jsx`（`include: ["src"]`）；应用同构，`tsc -b && vp build`。
-- **路径约定**：下文的 `src/**` 指库内路径时位于 `packages/float-avatar/src/**`，指页面/应用时位于 `apps/admin/src/**`。
+- **路径约定**：下文的 `src/**` 指库内路径时位于 `packages/react-float-avatar/src/**`，指页面/应用时位于 `apps/admin/src/**`。
 
 ## 架构
 
@@ -61,7 +61,7 @@ vp run float-avatar#dev  # 只监听库产物（平时不需要，dev 下应用�
 package.json           工作区根：脚本 + 公共 devDeps（typescript / vite / vite-plus）
 pnpm-workspace.yaml    packages/* + apps/* + catalog
 vite.config.ts         根配置：staged 钩子 + fmt + lint
-packages/float-avatar/ 组件库（可发布）
+packages/react-float-avatar/ 组件库（可发布）
   package.json         peerDeps: react/antd；exports→src、publishConfig.exports→dist
   vite.config.ts       pack（dts + exports.devExports）+ react 插件（.tsx 测试用）
   src/index.ts         唯一对外出口：FloatingAvatar / avatarMessage / avatarBadge / useAvatarState / 类型
@@ -78,15 +78,15 @@ apps/admin/            后台应用（库的消费者 + 预览宿主）
 
 ### 工作区与库边界
 
-- **开发即源码**：库 `exports` 指向 `src/index.ts`、`publishConfig.exports` 指向 `dist/index.mjs`（由 `vp pack` 的 `exports.devExports` 维护）。因此 `apps/admin` 在 dev 下直接把 `float-avatar` 解析到源码（可验证：dev server 里该模块 URL 是 `/@fs/…/packages/float-avatar/src/index.ts`），改库即热更，不需要 alias、也不需要 `vp pack --watch`。
+- **开发即源码**：库 `exports` 指向 `src/index.ts`、`publishConfig.exports` 指向 `dist/index.mjs`（由 `vp pack` 的 `exports.devExports` 维护）。因此 `apps/admin` 在 dev 下直接把 `react-float-avatar` 解析到源码（可验证：dev server 里该模块 URL 是 `/@fs/…/packages/react-float-avatar/src/index.ts`），改库即热更，不需要 alias、也不需要 `vp pack --watch`。
 - **库不依赖应用**：库的 peer 依赖只有 `react` + `antd`；`react-router-dom`、`@ant-design/icons` 只允许出现在 `apps/admin`。要加新的应用侧依赖，加到 app，不要加到库。
 - **库不打包资源**：图标用内联组件（`CloseIcon`），头像由 `avatarSrc` prop 传入。新增图片/字体前先想清楚消费者怎么解析——优先内联或让调用方传入。
-- **对外只出 `src/index.ts`**：应用与外部一律 `import { … } from "float-avatar"`，不要深链库内部文件，否则重构内部结构就是破坏性变更。
+- **对外只出 `src/index.ts`**：应用与外部一律 `import { … } from "react-float-avatar"`，不要深链库内部文件，否则重构内部结构就是破坏性变更。
 - **预览调试**：不需要额外的 playground，`apps/admin` 就是宿主——`vp run dev` 起应用，在页面里调 `avatarMessage.show(...)` 验证；`vp run visual-check` 做几何验收。
 
 ## FloatingAvatar 核心设计决策
 
-这是项目的核心功能。修改前务必先读 `packages/float-avatar/src/components/FloatingAvatar.tsx` 和 `packages/float-avatar/src/hooks/useEdgeAnchor.ts`。
+这是项目的核心功能。修改前务必先读 `packages/react-float-avatar/src/components/FloatingAvatar.tsx` 和 `packages/react-float-avatar/src/hooks/useEdgeAnchor.ts`。
 
 ### CSS 定位属性与锚定方向一致
 
@@ -133,7 +133,7 @@ CSS 属性名镜像锚定边：
 
 ### 头像消息与角标
 
-消息与红点都走 `packages/float-avatar/src/hooks/avatarMessage.ts` 的单例，**不要在业务组件里另存一份消息状态**：
+消息与红点都走 `packages/react-float-avatar/src/hooks/avatarMessage.ts` 的单例，**不要在业务组件里另存一份消息状态**：
 
 ```ts
 avatarMessage.show("一行简单消息");          // 纯消息：直接传字符串（等价 { content: 字符串 }）
@@ -181,7 +181,7 @@ avatarBadge.show(); avatarBadge.hide(); avatarBadge.getState();
 2. **UI 渲染层**（`AvatarBubble.test.tsx` / `FloatingAvatar.test.tsx`，`// @vitest-environment jsdom`）：把渲染规格锁成断言——内边距、宽度上限、圆角、图标槽尺寸、标题/正文字号行高字重、关闭图标尺寸与位置、尾巴尺寸与位置、定位值、进出场动效参数、按钮语义、拖拽落锚写入的 anchor、拖拽期气泡隐藏、红点显隐。**这些断言是渲染规格的事实来源**：故意改样式时同步改断言，非故意改动时它们会失败，这正是要的效果。
 3. **浏览器几何验收**（`vp run visual-check`，需要 Chrome + `vp run admin#dev`；脚本在 `apps/admin/scripts/visual-check.mjs`，默认探测 5173/5174/5175）：在真实浏览器里量取卡片矩形、字号字重、按钮、关闭图标、右对齐、尾巴间距等几何值并与预期表比对，任一项漂移就非零退出。像素/字体/antd CSS 这类 jsdom 测不到的东西靠这一层。
 
-jsdom 环境的补齐在 `packages/float-avatar/src/test/domEnvironment.ts`（`jsdom` 是库的 devDependency，只在测试环境使用）：`matchMedia` / `ResizeObserver` / `Element.animate` / `PointerEvent` 的最小替身，以及 `stubLayout()`（写入假的 offsetWidth/offsetHeight/scrollHeight）和 `triggerResize()`（手动触发重新测量）。jsdom 不做真实布局，所以 UI 断言只断内联样式与结构，不断像素。
+jsdom 环境的补齐在 `packages/react-float-avatar/src/test/domEnvironment.ts`（`jsdom` 是库的 devDependency，只在测试环境使用）：`matchMedia` / `ResizeObserver` / `Element.animate` / `PointerEvent` 的最小替身，以及 `stubLayout()`（写入假的 offsetWidth/offsetHeight/scrollHeight）和 `triggerResize()`（手动触发重新测量）。jsdom 不做真实布局，所以 UI 断言只断内联样式与结构，不断像素。
 
 组件里给 DOM 自动化留了两个稳定钩子：标题 `data-bubble-title`、正文 `data-bubble-content`（`AvatarBubble.test.tsx` 与 `apps/admin/scripts/visual-check.mjs` 都靠它们定位，不要随手删）。
 

@@ -1,5 +1,5 @@
 {
-  "name": "float-avatar",
+  "name": "react-float-avatar",
   "version": "0.0.0",
   "description": "可拖拽的浮动 AI 头像：边缘锚定 + 四角吸附 + 消息气泡 + 红点角标（React + antd）",
   "files": [

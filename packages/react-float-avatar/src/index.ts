@@ -1,8 +1,8 @@
 /**
- * float-avatar — 对外出口
+ * react-float-avatar — 对外出口
  *
  * 只导出公共 API + 类型；内部文件（hooks/components 下的实现）不直接对外，
- * 消费方一律从 "float-avatar" 引入，方便后续重构内部结构。
+ * 消费方一律从 "react-float-avatar" 引入，方便后续重构内部结构。
  */
 
 export { default as FloatingAvatar } from "./components/FloatingAvatar";

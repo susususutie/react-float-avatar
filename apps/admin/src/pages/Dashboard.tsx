@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Card, Typography } from "antd";
-import { avatarMessage } from "float-avatar";
+import { avatarMessage } from "react-float-avatar";
 
 const { Title, Paragraph } = Typography;
 

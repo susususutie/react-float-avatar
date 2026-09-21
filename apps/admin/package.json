@@ -11,9 +11,9 @@
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
     "antd": "^6.6.4",
-    "float-avatar": "workspace:*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-float-avatar": "workspace:*",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {

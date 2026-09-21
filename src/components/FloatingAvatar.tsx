@@ -10,16 +10,21 @@
  *   - 落点决策（夹紧 + 四角吸附 + 反算锚点）统一走 resolveDrop，预览与真实落锚共用
  *   - 位移小于 CLICK_THRESHOLD 视为点击：不落锚点，元素回到拖拽前的位置
  *   - 规则本身不可见，可用 mask 打开可视化遮罩（见 AnchorMask）
+ *   - 消息气泡与角标来自 avatarMessage 单例（见 AvatarBubble）：气泡贴着头像展示，
+ *     拖拽中隐藏、松手后按新锚点重新出现；角标只由业务手动控制
  *
  * 常量语义：ELEMENT_SIZE 头像边长（正方形）、EDGE_PADDING 默认锚定间距兼吸附间距、
  * SNAP_THRESHOLD 吸附触发半径、CLICK_THRESHOLD 点击/拖拽分界、STORAGE_KEY 持久化键名。
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { Badge } from "antd";
 import avatarImg from "./avatar.png";
 import AnchorMask from "./AnchorMask";
 import type { AnchorMaskMode, AnchorMaskOptions, DragPreview } from "./AnchorMask";
+import AvatarBubble from "./AvatarBubble";
+import { avatarMessage, useAvatarState } from "../hooks/avatarMessage";
 import { useDraggable } from "../hooks/useDraggable";
 import { anchorToXY, clampToViewport, useEdgeAnchor } from "../hooks/useEdgeAnchor";
 import { resolveDrop } from "../hooks/resolveDrop";
@@ -59,6 +64,10 @@ export default function FloatingAvatar({
 }: FloatingAvatarProps) {
   const ref = useRef<HTMLDivElement>(null);
   const viewport = useViewportSize();
+  const { message, badgeVisible } = useAvatarState();
+  const closeMessage = useCallback((id: string) => {
+    avatarMessage.close(id);
+  }, []);
   const {
     anchor,
     style: anchorStyle,
@@ -172,6 +181,15 @@ export default function FloatingAvatar({
         className={maskClassName}
         style={maskStyle}
       />
+      {/* 气泡在头像之前渲染：两者同层（9999），气泡本身不会盖住头像 */}
+      <AvatarBubble
+        message={message}
+        hidden={dragging}
+        anchor={anchor}
+        viewport={viewport}
+        elementSize={ELEMENT_SIZE}
+        onClose={closeMessage}
+      />
       <div
         ref={ref}
         style={{
@@ -184,7 +202,6 @@ export default function FloatingAvatar({
           width: ELEMENT_SIZE,
           height: ELEMENT_SIZE,
           borderRadius: "50%",
-          overflow: "hidden",
           cursor: dragging ? "grabbing" : "grab",
           boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
           zIndex: 9999,
@@ -192,12 +209,23 @@ export default function FloatingAvatar({
           touchAction: "none",
         }}
       >
-        <img
-          src={avatarImg}
-          alt="AI 助手"
-          draggable={false}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
+        {/* 角标由 avatarBadge 手动控制；红点落在圆周右上，需要头像自身裁成圆形而不是靠父级 overflow */}
+        <Badge dot={badgeVisible} offset={[-4, 4]}>
+          <span style={{ display: "block", width: ELEMENT_SIZE, height: ELEMENT_SIZE }}>
+            <img
+              src={avatarImg}
+              alt="AI 助手"
+              draggable={false}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+                borderRadius: "50%",
+              }}
+            />
+          </span>
+        </Badge>
       </div>
     </>
   );

@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 *.tsbuildinfo
+# pnpm pack 的产物只允许落在临时目录（残留的 tgz 会让 pnpm publish 的 git 检查报 UNCLEAN）
+*.tgz
 
 # Editor directories and files
 .vscode/*

@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vite-plus/test";
-import { anchorToCSS, anchorToXY, validateAnchor, xyToAnchor } from "./useEdgeAnchor";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  anchorToCSS,
+  anchorToXY,
+  readStoredAnchor,
+  validateAnchor,
+  xyToAnchor,
+} from "./useEdgeAnchor";
 import type { EdgeAnchor } from "./useEdgeAnchor";
 
 const VIEWPORT_WIDTH = 1440;
@@ -97,5 +103,48 @@ describe("validateAnchor", () => {
     );
     expect(anchor.horizontal.offset).toBe(600 - ELEMENT_SIZE);
     expect(anchor.vertical.offset).toBe(0);
+  });
+});
+
+describe("readStoredAnchor", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("无记录 / 脏 JSON / 结构非法都返回 null，合法记录原样返回", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    });
+
+    // 无记录
+    expect(readStoredAnchor({ storageKey: "k" })).toBeNull();
+
+    // 脏 JSON（解析失败不许进入定位计算）
+    store.set("k", "{not json");
+    expect(readStoredAnchor({ storageKey: "k" })).toBeNull();
+
+    // 结构非法（edge 枚举不对）
+    store.set("k", JSON.stringify({ horizontal: { edge: "middle", offset: 1 } }));
+    expect(readStoredAnchor({ storageKey: "k" })).toBeNull();
+
+    // 合法记录
+    const valid = {
+      horizontal: { edge: "left", offset: 10 },
+      vertical: { edge: "top", offset: 8 },
+    };
+    store.set("k", JSON.stringify(valid));
+    expect(readStoredAnchor({ storageKey: "k" })).toEqual(valid);
+  });
+
+  it("存储不可用（读取抛错）时返回 null 而不是崩溃", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("SecurityError: denied");
+      },
+    });
+
+    expect(readStoredAnchor({ storageKey: "k" })).toBeNull();
   });
 });

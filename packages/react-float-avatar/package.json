@@ -1,7 +1,18 @@
 {
   "name": "react-float-avatar",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "可拖拽的浮动 AI 头像：边缘锚定 + 四角吸附 + 消息气泡 + 红点角标（React + antd）",
+  "keywords": [
+    "antd",
+    "assistant",
+    "avatar",
+    "badge",
+    "bubble",
+    "draggable",
+    "floating",
+    "react"
+  ],
+  "license": "Apache-2.0",
   "files": [
     "dist"
   ],
@@ -23,7 +34,7 @@
     "build": "vp pack",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "prepublishOnly": "vp pack"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -40,7 +51,7 @@
   },
   "peerDependencies": {
     "antd": "^6.0.0",
-    "react": "^19.0.0"
+    "react": "^18.0.0 || ^19.0.0"
   },
   "devEngines": {
     "packageManager": {

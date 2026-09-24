@@ -6,41 +6,70 @@
  *   → 松手时用 resolveDrop 算出锚点，并在同一次提交里把 transform 清零。
  *
  * 位置策略：
- *   - 锚点语义、持久化、缩放校验由 useEdgeAnchor 负责
+ *   - 锚点语义、持久化恢复、缩放校验由 useEdgeAnchor 负责（SSR/hydration 安全，
+ *     渲染期不读 localStorage）
  *   - 落点决策（夹紧 + 四角吸附 + 反算锚点）统一走 resolveDrop，预览与真实落锚共用
  *   - 位移小于 CLICK_THRESHOLD 视为点击：不落锚点，元素回到拖拽前的位置
  *   - 规则本身不可见，可用 mask 打开可视化遮罩（见 AnchorMask）
  *   - 消息气泡与角标来自 avatarMessage 单例（见 AvatarBubble）：气泡贴着头像展示，
  *     拖拽中隐藏、松手后按新锚点重新出现；角标只由业务手动控制
  *
- * 常量语义：ELEMENT_SIZE 头像边长（正方形）、EDGE_PADDING 默认锚定间距兼吸附间距、
- * SNAP_THRESHOLD 吸附触发半径、CLICK_THRESHOLD 点击/拖拽分界、STORAGE_KEY 持久化键名。
+ * 结构（槽位契约，见方案 §3 / §14）：
+ *   容器 div（几何 / 拖拽 / a11y / 焦点环，**不裁剪**）
+ *     └ Badge（角标红点，位于裁剪层之外，永不被裁）
+ *          └ 槽位裁剪层 span（overflow hidden + 圆角，只包内容）
+ *               └ avatarSrc 图片 或 children（任意形象，含未来帧动画）
+ *
+ * 常量语义：DEFAULT_SIZE 头像默认边长、EDGE_PADDING 默认锚定间距兼吸附间距、
+ * SNAP_THRESHOLD 吸附触发半径、CLICK_THRESHOLD 点击/拖拽分界、
+ * DEFAULT_STORAGE_KEY 默认持久化键名（多实例用 storageKey prop 隔离）。
  */
 
 import { useCallback, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { Badge } from "antd";
+import type { CSSProperties, FocusEvent, KeyboardEvent, ReactNode, SyntheticEvent } from "react";
+import { Badge, theme } from "antd";
 import AnchorMask from "./AnchorMask";
 import type { AnchorMaskMode, AnchorMaskOptions, DragPreview } from "./AnchorMask";
 import AvatarBubble from "./AvatarBubble";
 import { avatarMessage, useAvatarState } from "../hooks/avatarMessage";
 import { useDraggable } from "../hooks/useDraggable";
 import { anchorToXY, clampToViewport, useEdgeAnchor } from "../hooks/useEdgeAnchor";
+import type { EdgeAnchor } from "../hooks/useEdgeAnchor";
+import { isFocusVisible } from "../hooks/isFocusVisible";
 import { resolveDrop } from "../hooks/resolveDrop";
 import { useViewportSize } from "../hooks/useViewportSize";
 
-const ELEMENT_SIZE = 56;
+const DEFAULT_SIZE = 56;
 const EDGE_PADDING = 24;
 const SNAP_THRESHOLD = 80;
 const CLICK_THRESHOLD = 5;
-const STORAGE_KEY = "ai-assistant-position";
+const DEFAULT_STORAGE_KEY = "ai-assistant-position";
+const DEFAULT_Z_INDEX = 9999;
+const DEFAULT_ALT = "AI 助手";
+/** 头像静置阴影；焦点环在其上叠加一圈主题色外描边 */
+const BASE_SHADOW = "0 4px 12px rgba(0,0,0,0.25)";
 
 /** 拖拽位移；零偏移复用同一个对象，让 React 直接跳过重渲染 */
 const NO_OFFSET = { x: 0, y: 0 };
 
-export interface FloatingAvatarProps {
-  /** 头像图片地址（由使用方提供，库不内置默认头像） */
-  avatarSrc: string;
+interface FloatingAvatarBaseProps {
+  /** 头像边长，默认 56；透传到锚点 / 吸附 / 遮罩 / 气泡全套几何 */
+  size?: number;
+  /** 位置持久化键名，默认 "ai-assistant-position"。
+   *  只隔离头像位置——气泡与角标是模块级单例，同页多实例共享同一条消息（见 README） */
+  storageKey?: string;
+  /** 头像无障碍名，默认 "AI 助手"；用于 alt 与容器 aria-label */
+  alt?: string;
+  /** 气泡关闭按钮无障碍名，默认「关闭消息」 */
+  closeLabel?: string;
+  /** 头像与气泡层级，默认 9999；遮罩取 zIndex - 1 */
+  zIndex?: number;
+  /** 首次访问（无持久化记录）时的默认锚点，默认右下 padding；只在挂载时生效 */
+  defaultAnchor?: EdgeAnchor;
+  /** 拖拽落锚 / 视口夹紧后回调（值变化才触发；挂载时的持久化恢复不触发） */
+  onAnchorChange?: (anchor: EdgeAnchor) => void;
+  /** avatarSrc 图片加载失败回调（children 形象由消费方自行兜底） */
+  onImgError?: (event: SyntheticEvent<HTMLImageElement>) => void;
   /** 位移小于 CLICK_THRESHOLD 的松手算点击，回调在这里触发 */
   onClick?: () => void;
   /** 松手时是否吸附到最近的四角 */
@@ -55,8 +84,27 @@ export interface FloatingAvatarProps {
   maskStyle?: CSSProperties;
 }
 
+/**
+ * 头像内容二选一（编译期挡绝大多数，运行时兜底）：
+ *   - avatarSrc：图片快捷路径（objectFit cover / draggable false / onImgError 只属于它）
+ *   - children：任意节点逃生口（Lottie / video / 未来的帧动画形象）
+ * 注意 ReactNode 本身包含 undefined，显式传 children={undefined} 仍能通过编译；
+ * 运行时两者全缺省时渲染空圆形兜底，不崩。
+ */
+export type FloatingAvatarProps = FloatingAvatarBaseProps &
+  ({ avatarSrc: string; children?: undefined } | { avatarSrc?: undefined; children: ReactNode });
+
 export default function FloatingAvatar({
   avatarSrc,
+  children,
+  size = DEFAULT_SIZE,
+  storageKey = DEFAULT_STORAGE_KEY,
+  alt = DEFAULT_ALT,
+  closeLabel,
+  zIndex = DEFAULT_Z_INDEX,
+  defaultAnchor,
+  onAnchorChange,
+  onImgError,
   onClick,
   snapToCorner: snapEnabled = true,
   mask = "off",
@@ -64,9 +112,11 @@ export default function FloatingAvatar({
   maskClassName,
   maskStyle,
 }: FloatingAvatarProps) {
+  const { token } = theme.useToken();
   const ref = useRef<HTMLDivElement>(null);
   const viewport = useViewportSize();
   const { message, badgeVisible } = useAvatarState();
+  const [focusVisible, setFocusVisible] = useState(false);
   const closeMessage = useCallback((id: string) => {
     avatarMessage.close(id);
   }, []);
@@ -75,10 +125,12 @@ export default function FloatingAvatar({
     style: anchorStyle,
     setAnchor,
   } = useEdgeAnchor({
-    storageKey: STORAGE_KEY,
-    elementWidth: ELEMENT_SIZE,
-    elementHeight: ELEMENT_SIZE,
+    storageKey,
+    elementWidth: size,
+    elementHeight: size,
     padding: EDGE_PADDING,
+    defaultAnchor,
+    onAnchorChange,
   });
 
   const [dragOffset, setDragOffset] = useState(NO_OFFSET);
@@ -98,8 +150,8 @@ export default function FloatingAvatar({
       top,
       viewportWidth,
       viewportHeight,
-      elementWidth: ELEMENT_SIZE,
-      elementHeight: ELEMENT_SIZE,
+      elementWidth: size,
+      elementHeight: size,
       snap: { enabled: snapEnabled, threshold: SNAP_THRESHOLD, padding: EDGE_PADDING },
     });
 
@@ -107,7 +159,7 @@ export default function FloatingAvatar({
     onDragStart: () => {
       const { width: viewportWidth, height: viewportHeight } = viewport;
       // 拖拽起点取当前渲染出的锚点位置，与屏幕上的位置保持一致
-      const origin = anchorToXY(anchor, viewportWidth, viewportHeight, ELEMENT_SIZE, ELEMENT_SIZE);
+      const origin = anchorToXY(anchor, viewportWidth, viewportHeight, size, size);
       dragOriginRef.current = { ...origin, viewportWidth, viewportHeight };
       setDragging(true);
 
@@ -128,8 +180,8 @@ export default function FloatingAvatar({
         top + deltaY,
         viewportWidth,
         viewportHeight,
-        ELEMENT_SIZE,
-        ELEMENT_SIZE,
+        size,
+        size,
       );
       setDragOffset({ x: current.left - left, y: current.top - top });
 
@@ -166,6 +218,22 @@ export default function FloatingAvatar({
     },
   });
 
+  /** a11y：role="button" 的 div 不会自发 click，Enter / Space 在这里补上激活语义 */
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    // Space 在可聚焦元素上默认会滚动页面
+    event.preventDefault();
+    onClick?.();
+  };
+
+  // 内联样式写不了 :focus-visible，用可注入的纯函数判断焦点模态（鼠标点击不亮环）
+  const onFocus = (event: FocusEvent<HTMLDivElement>) =>
+    setFocusVisible(isFocusVisible(event.currentTarget));
+  const onBlur = () => setFocusVisible(false);
+
+  // 视口未知（SSR 首帧 / 无 JS 的服务端 HTML）先隐藏，layout effect 测出真实视口后绘制
+  const viewportUnknown = viewport.width === 0;
+
   return (
     <>
       {/* 遮罩挂在头像之前：fixed 层级不受头像 transform 影响，z-index 低于头像，只做解释不参与交互 */}
@@ -175,25 +243,36 @@ export default function FloatingAvatar({
         viewport={viewport}
         anchor={anchor}
         preview={preview}
-        elementSize={ELEMENT_SIZE}
+        elementSize={size}
         padding={EDGE_PADDING}
         threshold={SNAP_THRESHOLD}
         snapEnabled={snapEnabled}
         options={maskOptions}
         className={maskClassName}
         style={maskStyle}
+        zIndex={zIndex - 1}
       />
-      {/* 气泡在头像之前渲染：两者同层（9999），气泡本身不会盖住头像 */}
+      {/* 气泡在头像之前渲染：两者同层，气泡本身不会盖住头像 */}
       <AvatarBubble
         message={message}
         hidden={dragging}
         anchor={anchor}
         viewport={viewport}
-        elementSize={ELEMENT_SIZE}
+        elementSize={size}
         onClose={closeMessage}
+        closeLabel={closeLabel}
+        zIndex={zIndex}
       />
+      {/* 容器层：几何 / 拖拽 / a11y / 焦点环，自身不裁剪（角标红点靠它不被切掉） */}
       <div
         ref={ref}
+        data-avatar-root=""
+        role="button"
+        tabIndex={0}
+        aria-label={alt}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
         style={{
           position: "fixed",
           ...anchorStyle,
@@ -201,31 +280,45 @@ export default function FloatingAvatar({
             dragOffset.x === 0 && dragOffset.y === 0
               ? undefined
               : `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
-          width: ELEMENT_SIZE,
-          height: ELEMENT_SIZE,
+          width: size,
+          height: size,
           borderRadius: "50%",
           cursor: dragging ? "grabbing" : "grab",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-          zIndex: 9999,
+          boxShadow: focusVisible ? `0 0 0 2px ${token.colorPrimary}, ${BASE_SHADOW}` : BASE_SHADOW,
+          zIndex,
           userSelect: "none",
           touchAction: "none",
+          visibility: viewportUnknown ? "hidden" : undefined,
         }}
       >
-        {/* 角标由 avatarBadge 手动控制；红点落在圆周右上，需要头像自身裁成圆形而不是靠父级 overflow */}
+        {/* 角标由 avatarBadge 手动控制；红点落在圆周右上，必须在裁剪层之外才不会被切 */}
         <Badge dot={badgeVisible} offset={[-4, 4]}>
-          <span style={{ display: "block", width: ELEMENT_SIZE, height: ELEMENT_SIZE }}>
-            <img
-              src={avatarSrc}
-              alt="AI 助手"
-              draggable={false}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-                borderRadius: "50%",
-              }}
-            />
+          {/* 槽位裁剪层：只包内容，方形内容进去也是圆形；未来帧动画形象从 children 接入 */}
+          <span
+            data-avatar-slot=""
+            style={{
+              display: "block",
+              width: size,
+              height: size,
+              borderRadius: "50%",
+              overflow: "hidden",
+            }}
+          >
+            {children ??
+              (avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={alt}
+                  draggable={false}
+                  onError={onImgError}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : null)}
           </span>
         </Badge>
       </div>

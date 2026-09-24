@@ -43,8 +43,17 @@ const DEFAULT_MASK_OPTIONS: Required<AnchorMaskOptions> = {
   anchorEdges: true,
   flipLine: true,
   releasePreview: true,
-  debug: import.meta.env.DEV,
+  debug: devMode(),
 };
+
+/**
+ * 构建环境是否 dev：必须容忍 `import.meta.env` 不存在——
+ * dist 产物被 Node / 非 Vite 打包器直接 import 时，模块级求值取 `.DEV` 会当场
+ * `TypeError: Cannot read properties of undefined`（只要 import 就炸，与是否用遮罩无关）。
+ */
+function devMode(): boolean {
+  return (import.meta as { env?: { DEV?: boolean } }).env?.DEV ?? false;
+}
 
 /** 拖拽中的落点预览 */
 export interface DragPreview {
@@ -84,6 +93,8 @@ interface AnchorMaskProps {
   className?: string;
   /** 根节点内联样式，不要覆盖 pointerEvents */
   style?: CSSProperties;
+  /** 遮罩层级，默认 9998（头像 / 气泡 zIndex - 1，恒低于头像） */
+  zIndex?: number;
 }
 
 const LABEL_FONT_SIZE = 11;
@@ -109,6 +120,7 @@ export default function AnchorMask({
   options: optionOverrides,
   className,
   style,
+  zIndex = 9998,
 }: AnchorMaskProps) {
   const { token } = theme.useToken();
   const options: Required<AnchorMaskOptions> = { ...DEFAULT_MASK_OPTIONS, ...optionOverrides };
@@ -170,7 +182,7 @@ export default function AnchorMask({
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 9998,
+        zIndex,
         pointerEvents: "none",
         overflow: "hidden",
         ...style,

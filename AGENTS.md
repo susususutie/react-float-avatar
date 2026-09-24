@@ -187,7 +187,7 @@ jsdom 环境的补齐在 `packages/react-float-avatar/src/test/domEnvironment.ts
 
 ## 注意事项
 
-- `vp check` 会报 `useDraggable` 中 `callbacksRef.current = options` 的 ref 警告——这是刻意的「最新回调」模式（消费方不必 memo 回调），可以忽略
+- `vp check` 会报 `useDraggable` 的 `callbacksRef.current = options` 与 `useEdgeAnchor` 的 `optionsRef/anchorRef/changeRef` 渲染期赋值 ref 警告——都是刻意的「最新值」模式（消费方不必 memo 回调 / 事件处理器要读最新 state），可以忽略
 - antd v6 Header 深色主题用 `theme.getDesignToken({ algorithm: theme.darkAlgorithm })`，不要硬编码颜色
 - 锚点持久化只走 `useEdgeAnchor`，不要再引入第二套 localStorage hook
 - 消息与角标只通过 `avatarMessage` / `avatarBadge` 单例操作；层级约定仍是遮罩 9998 < 气泡与头像 9999

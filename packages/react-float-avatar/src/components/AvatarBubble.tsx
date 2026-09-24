@@ -12,13 +12,14 @@
  * 与页面其他浮层保持同一套设计语言。
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Button, theme } from "antd";
 import CloseIcon from "./CloseIcon";
 import { anchorToXY } from "../hooks/useEdgeAnchor";
 import type { EdgeAnchor } from "../hooks/useEdgeAnchor";
 import { resolveBubblePlacement } from "../hooks/resolveBubblePlacement";
+import { useIsoLayoutEffect } from "../hooks/useIsoLayoutEffect";
 import type { AvatarMessageItem } from "../hooks/avatarMessage";
 import type { ViewportSize } from "../hooks/useViewportSize";
 
@@ -63,6 +64,10 @@ interface AvatarBubbleProps {
   gap?: number;
   margin?: number;
   maxWidth?: number;
+  /** 关闭按钮无障碍名，默认「关闭消息」（非中文站由 FloatingAvatar 的 closeLabel 覆盖） */
+  closeLabel?: string;
+  /** 气泡与头像同层，默认 9999 */
+  zIndex?: number;
 }
 
 /**
@@ -116,6 +121,8 @@ export default function AvatarBubble({
   gap = DEFAULT_GAP,
   margin = DEFAULT_MARGIN,
   maxWidth = DEFAULT_MAX_WIDTH,
+  closeLabel = "关闭消息",
+  zIndex = 9999,
 }: AvatarBubbleProps) {
   const { token } = theme.useToken();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -192,7 +199,8 @@ export default function AvatarBubble({
 
   // 量出「自然高度」：正文滚动时 card 会变矮，用 scrollHeight 才能拿到未限高的高度，
   // 否则会出现「限高 → 变矮 → 又判定放得下 → 取消限高」的来回抖动。
-  useLayoutEffect(() => {
+  // 同构版：服务端退化为 useEffect，消除 renderToString 的 useLayoutEffect 警告（react@18 实测）。
+  useIsoLayoutEffect(() => {
     const card = cardRef.current;
     // 注意：只有 title 的消息没有正文节点，不能因此跳过测量，否则会沿用上一条消息的尺寸
     if (!card) return;
@@ -322,8 +330,9 @@ export default function AvatarBubble({
         position: "fixed",
         left: placement.left,
         ...bubbleOffset,
-        zIndex: 9999,
-        visibility: metrics.width > 0 ? "visible" : "hidden",
+        zIndex,
+        // 视口未知（SSR 首帧 / 无 JS 的服务端 HTML）与测量完成前都先隐藏
+        visibility: viewport.width > 0 && metrics.width > 0 ? "visible" : "hidden",
         opacity: hidden ? 0 : 1,
         transform: hidden ? "scale(0.92)" : "scale(1)",
         transformOrigin:
@@ -449,7 +458,7 @@ export default function AvatarBubble({
         {message.closable ? (
           <button
             type="button"
-            aria-label="关闭消息"
+            aria-label={closeLabel}
             onClick={() => requestClose(message.id)}
             style={{
               position: "absolute",

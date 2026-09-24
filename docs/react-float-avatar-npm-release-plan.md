@@ -9,6 +9,8 @@
 > **规划补充（2026-09-24）**：新增 §14「未来帧动画 / codex 宠物兼容性约束」——未来头像将支持特定时机的帧动画形象与互动（类 codex 宠物），本次不实现，但立四条设计护栏（槽位结构 / 状态通路 / 动效原则 / 明确不做的范围），保证日后接入是纯加法、无破坏性变更。
 >
 > **复审修订（2026-09-24，4 阻断 + 5 小问题全部接受）**：槽位裁剪改分层契约（容器不裁 / Badge 在裁剪层外 / 裁剪层只包内容——现状容器无 `overflow: hidden`，按原文实施会裁掉红点）；`:focus-visible` 判定抽 `isFocusVisible` 纯函数（实测 jsdom 30 支持该选择器返回 false，原文「不支持走回退」是错的）；§8 校验顺序改为 build → dist import → pack 且 tarball 用 `--pack-destination` 落临时目录（原文测的是旧 dist）；§11 补「git status 干净再 publish」+ `.gitignore` 忽略 `*.tgz`（pnpm git 检查含未跟踪文件）；视口测量改同构 layout effect；React 18 验证改 /tmp fixture；联合类型口径修正（ReactNode 含 undefined）；§8 补 `vp run -r build`；§14.2 状态现状澄清（头像容器无 hover state，hovered 在气泡侧）。
+>
+> **实施记录（2026-09-24，§9 六步全部完成）**：81 测试 + `vp check` 0 errors + `visual-check` 26/26 + dist Node import + React19 双 resolution tsc + React18（tsc + renderToString）fixture 全过；真机帧级采样证实锚点恢复在首帧绘制前完成（115 挂载帧全部在持久位置，0 跳帧，§13 时序项闭环）。实施中两处与原文的补充：(a) **视口首帧口径修订**——客户端初始化也不读 window（否则 hydration 首帧 ≠ 服务端），统一 {0,0} + layout effect 绘制前测量，断言口径同步改 §5/§7；(b) **React 18 fixture 实测发现 `AvatarBubble` 裸 `useLayoutEffect`（气泡测量）打 SSR 警告**，抽公共 `hooks/useIsoLayoutEffect` 三处统一（发现于代码落地后的 fixture 复验，本文档随后同步，顺序倒置在此如实记录）。另实测：pnpm 12.4.1 会把 `prepack` 从 tarball 的 `scripts` 剥掉（§8）。发布未执行——按 §11 需用户显式授权。
 
 ## 1. 决策总览
 
@@ -124,12 +126,13 @@ interface BaseFloatingAvatarProps {
 
 ## 5. SSR / 运行环境兼容
 
-| 问题                                                                                                                                                                                                 | 修法                                                                                                                                                                                                                                                                                                   |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `useViewportSize` 初始化读 `window.innerWidth`（SSR 崩 / hydration mismatch）                                                                                                                        | `typeof window` 守卫：服务端与视口未知时返回 `{width: 0, height: 0}`，mount 后用**同构 `useLayoutEffect`** 测量（与 anchor 恢复同一时序，否则 hydration 后「先隐藏一帧再出现」，比纯 CSR 多一帧空白）。**「首帧 hidden」只针对视口未知（SSR）场景**；纯 CSR 挂载首帧就有真实视口，不隐藏（审核意见 7） |
-| `useSyncExternalStore(subscribe, getState)` 缺 `getServerSnapshot`（**审核阻断项 4**：SSR `renderToString` 实测抛 `Missing getServerSnapshot`）                                                      | `useAvatarState` 改为 `useSyncExternalStore(subscribe, getState, getServerSnapshot)`，`getServerSnapshot` 返回冻结的默认状态 `{ message: null, queue: [], badgeVisible: false }`。**`avatarMessage.ts` 必须进 §9 文件清单**                                                                            |
-| `useEdgeAnchor` 的 `useState` 初始化读 localStorage（hydration mismatch / SSR）                                                                                                                      | 首帧用 `defaultAnchor`（或右下默认），localStorage 读取移到 **同构 `useLayoutEffect`**（`typeof window !== 'undefined' ? useLayoutEffect : useEffect`，模块级判定），**在绘制前恢复持久化位置**，消除「先画右下角再跳走」的一帧跳动（审核意见 7）。恢复时用 ref 标记跳过 `onAnchorChange`              |
-| `AnchorMask` 的 `import.meta.env.DEV` 模块级求值（**审核阻断项 4**：dist 产物 `import` 期即 `TypeError: Cannot read properties of undefined (reading 'DEV')`，只要 import 就炸，与是否用 mask 无关） | 改为 `import.meta.env?.DEV ?? false`；§7 增加「node 直接 import dist 产物」断言（现有 dist 中该处实测仍存在，改完必须重新 build 验证）                                                                                                                                                                 |
+| 问题                                                                                                                                                                                                 | 修法                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `useViewportSize` 初始化读 `window.innerWidth`（SSR 崩 / hydration mismatch）                                                                                                                        | **实施修订（2026-09-24）**：首帧统一初始化 `{width: 0, height: 0}`（保证 hydration 首帧与服务端完全一致，客户端初始化读 window 会让 hydration 首帧 ≠ 服务端 → mismatch），真实视口由**同构 `useLayoutEffect`** 在**浏览器首次绘制前**测出（与 anchor 恢复同一时序）。因此任何场景都**不会画出**「视口未知」的一帧：SSR 静态 HTML（无 effect）保持 `visibility: hidden` 兜底，纯 CSR / hydration 的**首帧绘制即可见**（审核意见 7 的实质满足，断言口径见 §7） |
+| `useSyncExternalStore(subscribe, getState)` 缺 `getServerSnapshot`（**审核阻断项 4**：SSR `renderToString` 实测抛 `Missing getServerSnapshot`）                                                      | `useAvatarState` 改为 `useSyncExternalStore(subscribe, getState, getServerSnapshot)`，`getServerSnapshot` 返回冻结的默认状态 `{ message: null, queue: [], badgeVisible: false }`。**`avatarMessage.ts` 必须进 §9 文件清单**                                                                                                                                                                                                                                  |
+| `useEdgeAnchor` 的 `useState` 初始化读 localStorage（hydration mismatch / SSR）                                                                                                                      | 首帧用 `defaultAnchor`（或右下默认），localStorage 读取移到 **同构 `useLayoutEffect`**（`typeof window !== 'undefined' ? useLayoutEffect : useEffect`，模块级判定），**在绘制前恢复持久化位置**，消除「先画右下角再跳走」的一帧跳动（审核意见 7）。恢复时用 ref 标记跳过 `onAnchorChange`                                                                                                                                                                    |
+| `AnchorMask` 的 `import.meta.env.DEV` 模块级求值（**审核阻断项 4**：dist 产物 `import` 期即 `TypeError: Cannot read properties of undefined (reading 'DEV')`，只要 import 就炸，与是否用 mask 无关） | 改为 `import.meta.env?.DEV ?? false`；§7 增加「node 直接 import dist 产物」断言（现有 dist 中该处实测仍存在，改完必须重新 build 验证）                                                                                                                                                                                                                                                                                                                       |
+| `AvatarBubble` 的气泡测量用裸 `useLayoutEffect`（**实施中新增，React 18 fixture 实测发现**）                                                                                                         | 三处同构 effect 统一抽到公共 `hooks/useIsoLayoutEffect.ts`（服务端退化 useEffect）。裸调用在 react@18.3 `renderToString` 下打 “Warning: useLayoutEffect does nothing on the server”；React 19 已移除该警告，工作区 react@19 的 SSR 测试测不到——真正守卫是 §7 的 React 18 fixture，`ssr.test.tsx` 也加了 console.error 断言（React 18 下即有牙齿）                                                                                                            |
 
 ## 6. API 收敛与多实例语义
 
@@ -149,7 +152,7 @@ interface BaseFloatingAvatarProps {
 | `onAnchorChange`          | jsdom          | 落锚触发一次、值不变不触发、**首次持久化恢复不触发**                                                                                                                                                                         |
 | 持久化恢复时序            | jsdom          | 恢复在绘制前完成（layout effect），无「右下角→持久位置」跳动路径                                                                                                                                                             |
 | SSR 守卫                  | node 环境      | 无 `window`/`localStorage` 下渲染不抛错；**`renderToString` 覆盖 `useAvatarState`（getServerSnapshot）**                                                                                                                     |
-| hydration/首帧            | jsdom          | 视口未知首帧 hidden；**纯 CSR 首帧不隐藏**（审核意见 7 反向断言）                                                                                                                                                            |
+| hydration/首帧            | node + jsdom   | **SSR（renderToString）输出 `visibility:hidden`**（视口未知兜底）；**CSR 挂载后（layout effect 已测视口）不残留 hidden**——首帧绘制发生在 layout effect 之后，故「视口未知」帧不可见（实施修订后口径，见 §5）                 |
 | 键盘激活                  | jsdom          | tabIndex、Enter/Space 触发 onClick、Space preventDefault                                                                                                                                                                     |
 | 焦点环                    | jsdom          | `isFocusVisible` 纯函数两分支：jsdom 默认行为覆盖 `:focus-visible → false` 不亮环；stub `matches` 抛错覆盖回退亮环。「键盘亮 / 鼠标不亮」jsdom 断不了 → §8 visual-check 或手工验收                                           |
 | `import.meta.env` 缺省    | 纯函数         | env 未定义时 debug 默认关闭不崩                                                                                                                                                                                              |
@@ -181,6 +184,8 @@ tar -xOf /tmp/rfa-pack/react-float-avatar-0.1.0.tgz package/package.json   # exp
 
 双保险：仓库 `.gitignore` 增加 `*.tgz`（防止其他操作把 tarball 留在工作区）。**不用 `--no-git-checks` 绕过发布检查**——那是掩盖问题，正确做法是 §11 的「发布前保证 git status 干净」。
 
+**实测补充（pnpm 12.4.1，2026-09-24）**：`pnpm pack` 会把 `prepack` 从 **tarball 的 `scripts`** 里剥掉（`--ignore-scripts` 对照证实是 pnpm 的打包行为，不是构建副作用）；`prepack` 本身仍会在 pack/publish 时从**工作区 manifest** 正常执行（输出可见 `prepack$ vp run build` → 构建产物落进 tarball）。published manifest 不含 `prepack` 是良性的（消费方不需要它），校验时不要误判为「prepack 没配」——判据是构建输出，不是 tarball scripts。
+
 **关键认知：校验对象是 tarball 里的 manifest，不是仓库里的 package.json**——`publishConfig.exports` 覆盖问题只能靠 `tar -xOf` 查出。
 
 ## 9. 实施顺序
@@ -207,6 +212,7 @@ packages/react-float-avatar/src/hooks/useViewportSize.ts        SSR 守卫 + 同
 packages/react-float-avatar/src/hooks/avatarMessage.ts          useSyncExternalStore 补 getServerSnapshot（审核阻断项）
 .gitignore                                增加 *.tgz（防 tarball 残留阻塞 publish）
 focusVisible 工具（并入 FloatingAvatar 或独立小文件）  isFocusVisible 纯函数（可注入测试）
+packages/react-float-avatar/src/hooks/useIsoLayoutEffect.ts  三处同构 layout effect 公共实现（实施中新增，React 18 fixture 发现）
 对应 *.test.ts(x)                              新增断言（含 SSR / dist import / react@18 / 消费方 tsc）
 ```
 
@@ -230,9 +236,9 @@ focusVisible 工具（并入 FloatingAvatar 或独立小文件）  isFocusVisibl
 
 ## 13. 审核未覆盖边界（实施完成后需补）
 
-- 未验证 React 18 运行时行为 → §7 已加验证项
-- 未验证 §5 改动后视觉是否跳动 → 实施后跑 `vp run visual-check` + 手动挂载观察恢复时序
-- 未真正发布 → §11 流程执行时逐项确认
+- ~~未验证 React 18 运行时行为~~ → **已验证（2026-09-24）**：/tmp/rfa-fixtures/react18 装 tarball，`@types/react@18` tsc 0 error + react@18.3.1 `renderToString` 通过（并据此修掉 useLayoutEffect SSR 警告，见 §5）
+- ~~未验证 §5 改动后视觉是否跳动~~ → **已验证**：`vp run visual-check` 26/26；真机 Chrome 帧级采样（注入 rAF sampler 后 reload）115 个挂载帧全部在持久化位置、0 跳帧、首帧即 visible——恢复时序闭环
+- 未真正发布 → §11 流程执行时逐项确认（发布需用户显式授权，AI 不得自行执行）
 
 ## 14. 未来帧动画 / codex 宠物兼容性约束（设计护栏，本次不实现）
 

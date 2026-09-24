@@ -297,6 +297,21 @@ function getState(): AvatarMessageState {
   return state;
 }
 
+/**
+ * SSR 快照：服务端固定返回空状态。
+ * useSyncExternalStore 缺第三个参数在 renderToString 下会直接抛
+ * 「Missing getServerSnapshot」——服务端本就不该有消息（单例状态也不允许跨请求泄漏）。
+ */
+const SERVER_STATE: AvatarMessageState = Object.freeze({
+  message: null,
+  queue: [],
+  badgeVisible: false,
+});
+
+function getServerSnapshot(): AvatarMessageState {
+  return SERVER_STATE;
+}
+
 /** 测试用：清空状态与 id 序列 */
 function reset(): void {
   state = { message: null, queue: [], badgeVisible: false };
@@ -322,7 +337,7 @@ function getBadgeState(): { visible: boolean } {
 
 export const avatarBadge = { show: showBadge, hide: hideBadge, getState: getBadgeState };
 
-/** 订阅整个头像状态（消息 + 红点），组件内使用 */
+/** 订阅整个头像状态（消息 + 红点），组件内使用；SSR 走 getServerSnapshot 空状态 */
 export function useAvatarState(): AvatarMessageState {
-  return useSyncExternalStore(subscribe, getState);
+  return useSyncExternalStore(subscribe, getState, getServerSnapshot);
 }

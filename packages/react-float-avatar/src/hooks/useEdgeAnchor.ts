@@ -12,11 +12,16 @@
  * CSS 定位策略：
  *   CSS 属性名镜像锚定边（锚定 right 就用 style.right），窗口缩放时浏览器自动跟随。
  *
- * 持久化：
- *   锚点写入 localStorage；读取时校验结构并夹紧到当前视口范围内。
+ * 持久化（SSR / hydration 安全）：
+ *   - 渲染期不读 localStorage：首帧只由 props 派生（defaultAnchor 或右下默认），
+ *     服务端与客户端 hydration 首帧因此完全一致，不会 mismatch；
+ *   - 恢复放在同构 useLayoutEffect，绘制前完成——纯 CSR 没有「先画右下角再跳走」的一帧；
+ *   - 恢复（含结构校验、夹紧）不触发 onAnchorChange：它不是用户动作；
+ *   - 视口缩放后的夹紧、拖拽落锚走 setAnchor：值变化才回调 onAnchorChange。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useIsoLayoutEffect } from "./useIsoLayoutEffect";
 
 export interface EdgeAnchor {
   horizontal: { edge: "left" | "right"; offset: number };
@@ -35,6 +40,10 @@ export interface EdgeAnchorOptions {
   elementHeight: number;
   /** 默认锚点距边缘的间距，同时作为四角吸附的间距 */
   padding: number;
+  /** 首次访问（无持久化记录）时的默认锚点；省略则为右下 padding。只在挂载时生效（初始值语义） */
+  defaultAnchor?: EdgeAnchor;
+  /** 锚点提交且值变化时回调；挂载时的持久化恢复不触发 */
+  onAnchorChange?: (anchor: EdgeAnchor) => void;
 }
 
 /** 锚点 → 绝对坐标（元素左上角） */
@@ -130,11 +139,14 @@ export function clampToViewport(
   };
 }
 
-function defaultAnchor(padding: number): EdgeAnchor {
-  return {
-    horizontal: { edge: "right", offset: padding },
-    vertical: { edge: "bottom", offset: padding },
-  };
+/** 初始锚点：消费方 defaultAnchor 优先，否则右下 padding */
+function initialAnchor(padding: number, explicit?: EdgeAnchor): EdgeAnchor {
+  return (
+    explicit ?? {
+      horizontal: { edge: "right", offset: padding },
+      vertical: { edge: "bottom", offset: padding },
+    }
+  );
 }
 
 function isEdge(value: unknown, allowed: readonly string[]): boolean {
@@ -156,23 +168,21 @@ function isEdgeAnchor(value: unknown): value is EdgeAnchor {
   return isAxis(anchor.horizontal, ["left", "right"]) && isAxis(anchor.vertical, ["top", "bottom"]);
 }
 
-/** 读取并校验锚点；结构非法或读取失败时回退到默认锚点 */
-export function loadAnchor(options: EdgeAnchorOptions): EdgeAnchor {
+/**
+ * 读取持久化锚点；无记录、结构非法或存储不可用时返回 null。
+ * 渲染期不调用它（SSR / hydration 安全），恢复时机由 useEdgeAnchor 的 layout effect 决定。
+ */
+export function readStoredAnchor(
+  options: Pick<EdgeAnchorOptions, "storageKey">,
+): EdgeAnchor | null {
   try {
     const stored = localStorage.getItem(options.storageKey);
-    if (!stored) return defaultAnchor(options.padding);
+    if (!stored) return null;
     const parsed: unknown = JSON.parse(stored);
-    if (!isEdgeAnchor(parsed)) return defaultAnchor(options.padding);
-    return validateAnchor(
-      parsed,
-      window.innerWidth,
-      window.innerHeight,
-      options.elementWidth,
-      options.elementHeight,
-    );
+    return isEdgeAnchor(parsed) ? parsed : null;
   } catch {
-    // JSON 解析失败或 localStorage 不可用
-    return defaultAnchor(options.padding);
+    // JSON 解析失败、结构非法或 localStorage 不可用（隐私模式 / SSR）
+    return null;
   }
 }
 
@@ -196,43 +206,92 @@ export function isSameAnchor(a: EdgeAnchor, b: EdgeAnchor): boolean {
 }
 
 /**
- * 锚点状态 + 持久化 + 视口缩放校验。
+ * 锚点状态 + 持久化恢复 + 视口缩放校验。
  *
- * state 是唯一事实来源：渲染用返回的 style（由 state 派生），事件回调直接用渲染期的
- * anchor，持久化由 effect 跟随 state 完成，因此不存在状态与存储不一致的路径。
+ * state 是唯一事实来源：渲染用返回的 style（由 state 派生）；
+ * setAnchor 是「值变化才提交」的唯一入口——落锚与视口夹紧经它回调 onAnchorChange，
+ * 持久化恢复直接写 state + ref，因此恢复不会触发回调。
  */
 export function useEdgeAnchor({
   storageKey,
   elementWidth,
   elementHeight,
   padding,
+  defaultAnchor: defaultAnchorProp,
+  onAnchorChange,
 }: EdgeAnchorOptions) {
-  const [anchor, setAnchor] = useState<EdgeAnchor>(() =>
-    loadAnchor({ storageKey, elementWidth, elementHeight, padding }),
+  const [anchor, setAnchorState] = useState<EdgeAnchor>(() =>
+    initialAnchor(padding, defaultAnchorProp),
   );
 
-  // 锚点一旦变化就写回存储；首次渲染会把默认值或夹紧后的值写回，保证两边一致
+  // latest-ref：恢复效果读「最新一次渲染」的选项（defaultAnchor 是初始值语义，只在恢复时取初值用）
+  const optionsRef = useRef({
+    storageKey,
+    elementWidth,
+    elementHeight,
+    padding,
+    defaultAnchor: defaultAnchorProp,
+  });
+  optionsRef.current = {
+    storageKey,
+    elementWidth,
+    elementHeight,
+    padding,
+    defaultAnchor: defaultAnchorProp,
+  };
+  // latest-ref：setAnchor / 恢复 / 保存都读同一份最新值，不依赖闭包里的渲染快照
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
+  const changeRef = useRef(onAnchorChange);
+  changeRef.current = onAnchorChange;
+  const restoredRef = useRef(false);
+
+  /** 提交锚点：值变化才写状态并回调（拖拽落锚与视口夹紧共用） */
+  const setAnchor = useCallback((input: EdgeAnchor | ((prev: EdgeAnchor) => EdgeAnchor)) => {
+    const prev = anchorRef.current;
+    const next = typeof input === "function" ? input(prev) : input;
+    if (isSameAnchor(next, prev)) return;
+    anchorRef.current = next;
+    setAnchorState(next);
+    changeRef.current?.(next);
+  }, []);
+
+  // 持久化恢复：layout effect 在绘制前完成（纯 CSR 无跳动帧）；有记录用记录值（夹紧后），
+  // 无记录则把初始锚点夹紧到当前视口。恢复不回调 onAnchorChange。
+  useIsoLayoutEffect(() => {
+    const current = optionsRef.current;
+    const stored = readStoredAnchor(current);
+    const candidate = stored ?? initialAnchor(current.padding, current.defaultAnchor);
+    const validated = validateAnchor(
+      candidate,
+      window.innerWidth,
+      window.innerHeight,
+      current.elementWidth,
+      current.elementHeight,
+    );
+    restoredRef.current = true;
+    if (!isSameAnchor(validated, anchorRef.current)) {
+      anchorRef.current = validated;
+      setAnchorState(validated);
+    }
+  }, [storageKey, elementWidth, elementHeight, padding]);
+
+  // 锚点一旦（恢复之后）变化就写回存储；恢复前不写，避免用初始默认值覆盖持久化记录
   useEffect(() => {
-    saveAnchor(storageKey, anchor);
+    if (!restoredRef.current) return;
+    saveAnchor(storageKey, anchorRef.current);
   }, [storageKey, anchor]);
 
-  // 视口缩小后 offset 可能超出范围，需要夹回合法区间
+  // 视口缩小后 offset 可能超出范围，夹回合法区间（值变化时经 setAnchor 回调）
   useEffect(() => {
     const onResize = () => {
-      setAnchor((current) => {
-        const validated = validateAnchor(
-          current,
-          window.innerWidth,
-          window.innerHeight,
-          elementWidth,
-          elementHeight,
-        );
-        return isSameAnchor(validated, current) ? current : validated;
-      });
+      setAnchor((current) =>
+        validateAnchor(current, window.innerWidth, window.innerHeight, elementWidth, elementHeight),
+      );
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [elementWidth, elementHeight]);
+  }, [elementWidth, elementHeight, setAnchor]);
 
   const style = useMemo(() => anchorToCSS(anchor), [anchor]);
 

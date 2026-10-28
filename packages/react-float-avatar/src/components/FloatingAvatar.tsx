@@ -32,6 +32,7 @@ import AnchorMask from "./AnchorMask";
 import type { AnchorMaskMode, AnchorMaskOptions, DragPreview } from "./AnchorMask";
 import AvatarBubble from "./AvatarBubble";
 import { avatarMessage, useAvatarState } from "../hooks/avatarMessage";
+import type { AvatarMessageCloseReason } from "../hooks/avatarMessage";
 import { useDraggable } from "../hooks/useDraggable";
 import { anchorToXY, clampToViewport, useEdgeAnchor } from "../hooks/useEdgeAnchor";
 import type { EdgeAnchor } from "../hooks/useEdgeAnchor";
@@ -117,8 +118,8 @@ export default function FloatingAvatar({
   const viewport = useViewportSize();
   const { message, badgeVisible } = useAvatarState();
   const [focusVisible, setFocusVisible] = useState(false);
-  const closeMessage = useCallback((id: string) => {
-    avatarMessage.close(id);
+  const destroyMessage = useCallback((id: string, reason: AvatarMessageCloseReason) => {
+    avatarMessage.destroy(id, reason);
   }, []);
   const {
     anchor,
@@ -259,7 +260,7 @@ export default function FloatingAvatar({
         anchor={anchor}
         viewport={viewport}
         elementSize={size}
-        onClose={closeMessage}
+        onClose={destroyMessage}
         closeLabel={closeLabel}
         zIndex={zIndex}
       />

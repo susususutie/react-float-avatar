@@ -128,7 +128,7 @@ describe("拖拽与锚点持久化", () => {
 });
 
 describe("消息气泡与红点", () => {
-  it("消息由 avatarMessage 单例驱动：show 出现、close 卸载", async () => {
+  it("消息由 avatarMessage 单例驱动：show 出现、destroy 卸载", async () => {
     renderAvatar(<FloatingAvatar avatarSrc={AVATAR_SRC} />);
     expect(bubbleElement()).toBeNull();
 
@@ -138,7 +138,7 @@ describe("消息气泡与红点", () => {
     expect(bubbleElement()?.textContent).toContain("你好");
 
     await act(async () => {
-      avatarMessage.close();
+      avatarMessage.destroy();
     });
     expect(bubbleElement()).toBeNull();
   });

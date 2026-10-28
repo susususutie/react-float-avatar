@@ -18,11 +18,13 @@ export type { EdgeAnchor, XY } from "./hooks/useEdgeAnchor";
 
 export { avatarBadge, avatarMessage, useAvatarState } from "./hooks/avatarMessage";
 export type {
-  AvatarMessageButtonType,
+  AvatarMessageAction,
   AvatarMessageCloseReason,
   AvatarMessageConfig,
   AvatarMessageInput,
+  AvatarMessageInstance,
   AvatarMessageItem,
+  AvatarMessageMode,
   AvatarMessagePatch,
   AvatarMessageState,
 } from "./hooks/avatarMessage";

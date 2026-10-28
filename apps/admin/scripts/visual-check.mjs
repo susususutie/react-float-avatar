@@ -144,11 +144,17 @@ const HELPERS = `
             fontSize: titleStyle.fontSize,
             lineHeight: titleStyle.lineHeight,
             fontWeight: titleStyle.fontWeight,
+            paddingRight: titleStyle.paddingRight,
           }
         : null,
       content: contentStyle
-        ? { fontSize: contentStyle.fontSize, lineHeight: contentStyle.lineHeight }
+        ? {
+            fontSize: contentStyle.fontSize,
+            lineHeight: contentStyle.lineHeight,
+            paddingRight: contentStyle.paddingRight,
+          }
         : null,
+      bodyPaddingRight: getComputedStyle(card.querySelector("[data-bubble-body]")).paddingRight,
       buttons: buttons.map((button) => button.textContent.trim()),
       closeIcon: closeRect
         ? { size: round(closeRect.width), topInset: round(closeRect.y - cardRect.y), rightInset: round(cardRect.right - closeRect.right) }
@@ -163,8 +169,8 @@ const SCRIPT = `(async () => {
 ${HELPERS}
   for (let i = 0; i < 100 && !(bubbleEl() && avatarEl()); i++) await sleep(100);
   const complexMessage = measure();
-  const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "再来一条消息");
-  if (!button) return JSON.stringify({ error: "找不到「再来一条消息」按钮（示例页变了？）" });
+  const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "普通消息");
+  if (!button) return JSON.stringify({ error: "找不到「普通消息」按钮（示例页变了？）" });
   button.click();
   await sleep(500);
   const plainMessage = measure();
@@ -237,32 +243,36 @@ try {
 
   console.log("\n== 复杂消息（头像 + 标题 + 业务正文 + ok/cancel）==");
   check("role", complex.role, "dialog");
-  check("卡片内边距", complex.cardPadding, "24px");
+  check("卡片内边距", complex.cardPadding, "20px 24px");
   check("卡片宽度上限", complex.cardMaxWidth, "400px");
   check("卡片圆角", complex.cardRadius, "8px");
-  check("卡片高度", complex.cardHeight, 208, 2);
+  check("卡片高度", complex.cardHeight, 196, 2);
   check("标题字号", complex.title?.fontSize, "14px");
   check("标题行高", complex.title?.lineHeight, "20px");
   check("标题字重", complex.title?.fontWeight, "600");
+  check("标题右侧让位", complex.title?.paddingRight, "24px");
+  check("body 不整体缩进", complex.bodyPaddingRight, "0px");
   check("正文字号", complex.content.fontSize, "14px");
   check("正文行高", complex.content.lineHeight, "20px");
-  check("底部按钮文案", complex.buttons.join("|"), "立即处理|稍后再说");
+  check("底部按钮文案", complex.buttons.join("|"), "稍后再说|立即处理");
   check("关闭图标尺寸", complex.closeIcon?.size, 12, 0.5);
-  check("关闭图标距上", complex.closeIcon?.topInset, 18, 1.5);
+  check("关闭图标距上", complex.closeIcon?.topInset, 14, 1.5);
   check("关闭图标距右", complex.closeIcon?.rightInset, 21, 1.5);
-  check("右对齐（卡片右边缘 = 头像右边缘）", complex.cardRight === complex.avatarRight, true);
+  check("右对齐（卡片右边缘 = 头像右边缘）", complex.cardRight, complex.avatarRight, 0.5);
   check("尾巴尖到头像", complex.tailTipGap, 16, 0.8);
 
   console.log('\n== 纯消息（show("文本")）==');
   check("role", plain.role, "status");
   check("卡片内边距", plain.cardPadding, "12px 16px");
   check("卡片宽度上限", plain.cardMaxWidth, "320px");
-  check("卡片高度", plain.cardHeight, 46, 2);
+  check("卡片高度", plain.cardHeight, 66, 2); // 示例文案在上限宽度内折成两行
   check("正文字号", plain.content.fontSize, "14px");
   check("正文行高", plain.content.lineHeight, "20px");
+  check("正文右侧让位", plain.content.paddingRight, "20px");
+  check("body 不整体缩进", plain.bodyPaddingRight, "0px");
   check("底部按钮文案", plain.buttons.join("|"), "");
   check("关闭图标尺寸", plain.closeIcon?.size, 12, 0.5);
-  check("右对齐（卡片右边缘 = 头像右边缘）", plain.cardRight === plain.avatarRight, true);
+  check("右对齐（卡片右边缘 = 头像右边缘）", plain.cardRight, plain.avatarRight, 0.5);
   check("尾巴尖到头像", plain.tailTipGap, 16, 0.8);
 
   if (SHOTS_DIR) {

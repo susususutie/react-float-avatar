@@ -27,20 +27,20 @@ export default function App() {
 }
 ```
 
-Show a message with actions (antd Modal semantics — button renders only when its callback is provided):
+Show a confirm with actions (antd `Modal.confirm` semantics):
 
 ```ts
-avatarMessage.show({
+const confirm = avatarMessage.confirm({
   title: "Build finished",
   content: "All checks passed.",
   okText: "View log",
-  onOk: () => openLog(),
+  onOk: async () => openLog(), // pending Promise → OK loading; reject keeps it open
   cancelText: "Dismiss",
   onCancel: () => {},
 });
 
-avatarMessage.update(id, "Still running…"); // patch by id
-avatarMessage.close(id); // no id closes current; queued item promotes
+confirm.update({ content: "Opening…" }); // controller returned by show / confirm
+confirm.destroy(); // programmatic close; X / Esc take the cancel path
 avatarBadge.show(); // red dot is fully manual
 avatarBadge.hide();
 ```
@@ -72,23 +72,28 @@ Exported types: `FloatingAvatarProps`, `EdgeAnchor`, `XY`, `AnchorMaskMode`, `An
 ```ts
 import { avatarMessage, avatarBadge, useAvatarState } from "react-float-avatar";
 
-const id = avatarMessage.show("plain text");        // simple message (string)
-const id2 = avatarMessage.show({ key?, title?, content?, avatar?, // complex message
-  okText?, okType?, onOk?, cancelText?, onCancel?, footer?,      // footer: full custom override
-  duration?, replaceable?, hiddenTimer?, hiddenMessage?, onClose? });
-avatarMessage.update(id, "patch");                  // string patch OK
-avatarMessage.close(id);                            // omit id → close current, promote queue head
+const msg = avatarMessage.show("plain text");       // simple message (string)
+const confirm = avatarMessage.confirm({              // OK/Cancel always rendered
+  key?, title?, content, avatar?,                    // content required (use show("text") for one-liners)
+  okText?, okDanger?, onOk?, cancelText?, onCancel?, // async / Promise-returning actions supported
+  footer?,                                           // full custom override
+  duration?, replaceable?, hiddenTimer?, hiddenMessage?, onClose?,
+});
+msg.update("patch");                                 // controller from show / confirm (string patch OK)
+msg.destroy();                                       // programmatic close
+avatarMessage.destroy(id);                           // id-based, for cross-module use
+avatarMessage.destroyAll();
 avatarBadge.show(); avatarBadge.hide(); avatarBadge.getState();
 const { message, queue, badgeVisible } = useAvatarState(); // subscribe if you need UI coupling
 ```
 
-Behavior worth knowing (all tested): later messages replace the current one unless `replaceable: false` (then they queue, limit 3); `duration` defaults to `0` (never auto-close); the badge never toggles by itself — wire it in your `onClose` / button callbacks.
+Behavior worth knowing (all tested): later messages replace the current one unless `replaceable: false` (then they queue, limit 3); dropped messages never call `onClose` (they were never shown); `duration` defaults to `0` (never auto-close); `onOk` / `onCancel` may return a Promise — the button shows loading only while it is pending, resolve closes (`ok` / `cancel`), reject keeps the bubble open; X / Esc call `onCancel` and close as `cancel`. The badge never toggles by itself — wire it in your `onClose` / button callbacks.
 
 ## Relationship with antd
 
 - `antd` is a **peer dependency** (`^6.0.0`); it is not bundled.
 - Bubble and focus-ring visuals are read from `theme.useToken()` (`colorBgElevated`, `colorPrimary`, `borderRadiusLG`, …), so your `ConfigProvider` theme (including `darkAlgorithm`) applies automatically. No hard-coded colors.
-- Button / Modal semantics inside the bubble mirror antd Modal (`okText`/`cancelText`/`footer`).
+- Button / Modal semantics inside the bubble mirror antd Modal: `okText`/`cancelText`/`footer`, async `onOk`/`onCancel` with loading, and a `{ update, destroy }` controller from `avatarMessage.show` / `avatarMessage.confirm`.
 
 ## Design assumptions (intentional, not gaps)
 

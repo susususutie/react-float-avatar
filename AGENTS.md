@@ -1,4 +1,4 @@
-# AGENTS.md — web-ai-poc
+# AGENTS.md — react-float-avatar
 
 <!--VITE PLUS START-->
 

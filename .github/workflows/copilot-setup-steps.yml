@@ -3,6 +3,8 @@ name: "Copilot Setup Steps"
 on:
   workflow_dispatch:
   push:
+    # 必须限定分支：tag 推送时 paths 过滤不生效，会导致打 tag 时误触发本 workflow
+    branches: [main]
     paths:
       - .github/workflows/copilot-setup-steps.yml
   pull_request:

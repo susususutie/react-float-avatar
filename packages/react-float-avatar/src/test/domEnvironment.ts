@@ -14,7 +14,11 @@
 type ResizeCallback = (entries: ResizeObserverEntry[], observer: ResizeObserver) => void;
 
 const observers = new Set<ResizeObserverStub>();
-const animationCalls: { keyframes: Keyframe[]; options?: KeyframeAnimationOptions }[] = [];
+const animationCalls: {
+  keyframes: Keyframe[];
+  options?: KeyframeAnimationOptions;
+  animation: { canceled: boolean };
+}[] = [];
 
 class ResizeObserverStub {
   readonly callback: ResizeCallback;
@@ -35,8 +39,11 @@ class ResizeObserverStub {
 
 class AnimationStub {
   finished = Promise.resolve();
+  canceled = false;
 
-  cancel(): void {}
+  cancel(): void {
+    this.canceled = true;
+  }
 }
 
 class PointerEventStub extends MouseEvent {
@@ -75,11 +82,13 @@ export function installDomShims(): void {
       keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
       options?: number | KeyframeAnimationOptions,
     ) => {
+      const animation = new AnimationStub();
       animationCalls.push({
         keyframes: (keyframes ?? []) as Keyframe[],
         options: typeof options === "object" ? options : undefined,
+        animation,
       });
-      return new AnimationStub() as unknown as Animation;
+      return animation as unknown as Animation;
     },
   });
 }
@@ -91,10 +100,11 @@ export function triggerResize(): void {
   }
 }
 
-/** 取出组件调用过的进出场动画参数 */
+/** 取出组件调用过的进出场动画参数（animation 可断言动画是否被 cancel） */
 export function getAnimationCalls(): {
   keyframes: Keyframe[];
   options?: KeyframeAnimationOptions;
+  animation: { canceled: boolean };
 }[] {
   return animationCalls;
 }

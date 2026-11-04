@@ -144,6 +144,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root.unmount());
   container.remove();
 });
@@ -569,6 +570,59 @@ describe("动效与拖拽隐藏", () => {
     const [call] = getAnimationCalls();
     expect(call.options?.duration).toBe(180);
     expect(call.keyframes.at(-1)).toMatchObject({ opacity: 1, transform: "scale(1)" });
+  });
+
+  it("换消息时取消上一条的退场动画（fill:forwards 残留会让下一条继承 opacity:0）", async () => {
+    const onClose = vi.fn();
+    const { closeButton } = renderBubble(makeMessage({ id: "msg-1", instanceId: 1 }), onClose);
+
+    act(() => {
+      closeButton?.click();
+    });
+    // 退场动画播完才回调 onClose
+    await act(async () => {});
+    expect(onClose).toHaveBeenCalledWith("msg-1", "cancel");
+
+    const exit = getAnimationCalls().find((call) => call.options?.fill === "forwards");
+    expect(exit).toBeDefined();
+    expect(exit?.animation.canceled).toBe(false);
+
+    renderBubble(makeMessage({ id: "msg-2", instanceId: 2 }), onClose);
+
+    expect(exit?.animation.canceled).toBe(true);
+  });
+
+  it("气泡卸载不残留悬停/聚焦态：下一条带 duration 的消息仍会自动关闭", async () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const render = (message: AvatarMessageItem | null) =>
+      act(() => {
+        root.render(
+          <AvatarBubble
+            message={message}
+            anchor={ANCHOR}
+            viewport={VIEWPORT}
+            elementSize={ELEMENT_SIZE}
+            onClose={onClose}
+          />,
+        );
+      });
+
+    render(makeMessage({ id: "msg-1", instanceId: 1, mode: "confirm", okText: "知道了" }));
+    const button = container.querySelector<HTMLButtonElement>("[data-bubble-actions] button");
+    act(() => {
+      button?.focus();
+    });
+    // 关掉消息让气泡卸载：焦点随节点一起消失，浏览器不会补发 blur，hovered 会卡在 true
+    render(null);
+    render(makeMessage({ id: "msg-2", instanceId: 2, duration: 3000 }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(3500);
+    });
+
+    expect(onClose).toHaveBeenCalledWith("msg-2", "duration");
+    vi.useRealTimers();
   });
 
   it("hidden 时透明且不接收指针事件（拖拽中隐藏气泡）", () => {

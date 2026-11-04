@@ -187,7 +187,8 @@ function AvatarBubble({
       void animation.finished
         .then(() => {
           if (exitRef.current?.instanceId !== target.instanceId) return;
-          exitRef.current = null;
+          // 这里不清 exitRef：fill:forwards 的残留要留到换消息时由下方 instanceId effect cancel，
+          // 否则复用同一 DOM 节点的下一条消息播完进场动画后会重新继承 opacity:0 / scale(0.92)
           onClose(target.id, reason);
         })
         .catch(() => {
@@ -286,6 +287,18 @@ function AvatarBubble({
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
+
+  /**
+   * 换消息或气泡卸载时按真实 DOM 重新对齐「是否在悬停/聚焦」。
+   * 节点被移除时浏览器不会补发 mouseleave / blur，hovered 会永久卡在 true，
+   * 于是 paused 永远为真、倒计时再也不启动（自动关闭失效）。
+   */
+  useEffect(() => {
+    const element = wrapperRef.current;
+    setHovered(
+      !!element && (element.matches(":hover") || element.contains(document.activeElement)),
+    );
+  }, [message]);
 
   // 新消息替换当前的气泡内容：取消正在进行的退场动画，直接原地展示
   useEffect(() => {

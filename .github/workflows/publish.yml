@@ -1,0 +1,54 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# id-token: write 是 npm Trusted Publishing（OIDC）的必要条件，provenance 也随之自动生成
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # 解析项目 pin 的 Node/devEngines（node 24 + pnpm 12.4.1），并安装依赖
+      - uses: voidzero-dev/setup-vp@v1.19.0
+        with:
+          cache: true
+          run-install: true
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          PKG_VERSION=$(node -p "require('./packages/react-float-avatar/package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag v$TAG_VERSION does not match package.json version $PKG_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Check
+        run: vp check
+
+      - name: Test
+        run: vp test
+
+      - name: Build
+        run: vp run -r build
+
+      # 打包必须走 pnpm（vp pm pack → prepack 触发构建）：npm 不应用 publishConfig.exports
+      - name: Pack
+        working-directory: packages/react-float-avatar
+        run: vp pm pack --pack-destination "$RUNNER_TEMP"
+
+      # 上传用 npm：原生支持 OIDC trusted publishing + 自动 provenance。
+      # 必须在仓库外执行——npm 在本仓库会被 devEngines（要求 pnpm）直接拒绝。
+      - name: Publish
+        working-directory: ${{ runner.temp }}
+        run: |
+          node -v && npm -v
+          npm publish ./react-float-avatar-*.tgz

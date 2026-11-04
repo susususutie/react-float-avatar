@@ -124,13 +124,16 @@ Behavior worth knowing (all tested): later messages replace the current one unle
 
 ## Publishing (maintainers)
 
-**This package must be packed and published with pnpm, never npm.** npm does not apply `publishConfig.exports`, so an npm-packed tarball would ship `exports: "./src/index.ts"` with only `dist` in `files` — a broken package. Verification lives in `pnpm pack --pack-destination <tmp>` + inspecting the tarball's `package.json`. Never use `--no-git-checks`; keep `git status` clean instead.
+**Releases are tag-driven:** pushing a `v*` tag runs `.github/workflows/publish.yml`, which verifies the tag against `package.json`, runs `vp check` / `vp test` / `vp run -r build`, packs, and publishes.
 
-```bash
-vp check && vp test       # format + lint + types + tests
-vp run -r build           # build all workspace packages
-pnpm publish              # release action — requires explicit human authorization
-```
+The split is deliberate — **pack with pnpm, upload with npm**:
+
+- **Pack with pnpm** (`vp pm pack`): npm does not apply `publishConfig.exports`, so an npm-packed tarball would ship `exports: "./src/index.ts"` with only `dist` in `files` — a broken package. Verification lives in inspecting the tarball's `package.json` (`exports` must point at `./dist/index.mjs`).
+- **Upload with `npm publish <tarball>`**: npm refuses to run inside this repo (`devEngines` requires pnpm), so the workflow publishes the pnpm-packed tarball from outside the checkout. npm also provides OIDC **trusted publishing** (no long-lived token) with **provenance attestations generated automatically** — no `--provenance` flag needed.
+
+One-time setup on npmjs.com → package Settings → Trusted publishing: GitHub Actions, owner `susususutie`, repo `react-float-avatar`, workflow filename `publish.yml`, and **allow `npm publish`** (configs created after Sep 2026 default to stage-only). The config must complete its first publish within 2 days or it expires.
+
+To release: bump `version` in `package.json`, commit, tag `v<version>`, push the tag. The workflow fails if the tag and `package.json` version disagree.
 
 ## License
 
@@ -149,5 +152,5 @@ Apache-2.0 — see [LICENSE](./LICENSE).
 - **扩展点**：`children` 槽位是自定义形象（含未来帧动画形象）的正式接口——容器管几何/拖拽/角标/可聚焦且不裁剪，裁剪只在槽位层，红点永不被裁；单例 store 只做字段加法
 - **SSR**：服务端可渲染无 `window` 不崩；视口与持久化位置都在绘制前的 layout effect 里确定，无 hydration mismatch、无「先右下角再跳走」
 - **已知限制**：拖拽无键盘替代、无受控锚点、多实例共享气泡、antd 仅 v6 实测、reduced-motion 只覆盖气泡
-- **发布**：**只能用 pnpm**（npm 不应用 `publishConfig.exports`，会打出坏包）；发布需人工显式授权
+- **发布**：打 `v*` tag 触发 GitHub Actions 自动发布——pnpm 打包（npm 不应用 `publishConfig.exports`，会打出坏包）+ npm 上传（OIDC trusted publishing，免 token，自动生成 provenance）
 - **License**：Apache-2.0

@@ -11,6 +11,8 @@
 > **复审修订（2026-09-24，4 阻断 + 5 小问题全部接受）**：槽位裁剪改分层契约（容器不裁 / Badge 在裁剪层外 / 裁剪层只包内容——现状容器无 `overflow: hidden`，按原文实施会裁掉红点）；`:focus-visible` 判定抽 `isFocusVisible` 纯函数（实测 jsdom 30 支持该选择器返回 false，原文「不支持走回退」是错的）；§8 校验顺序改为 build → dist import → pack 且 tarball 用 `--pack-destination` 落临时目录（原文测的是旧 dist）；§11 补「git status 干净再 publish」+ `.gitignore` 忽略 `*.tgz`（pnpm git 检查含未跟踪文件）；视口测量改同构 layout effect；React 18 验证改 /tmp fixture；联合类型口径修正（ReactNode 含 undefined）；§8 补 `vp run -r build`；§14.2 状态现状澄清（头像容器无 hover state，hovered 在气泡侧）。
 >
 > **实施记录（2026-09-24，§9 六步全部完成）**：81 测试 + `vp check` 0 errors + `visual-check` 26/26 + dist Node import + React19 双 resolution tsc + React18（tsc + renderToString）fixture 全过；真机帧级采样证实锚点恢复在首帧绘制前完成（115 挂载帧全部在持久位置，0 跳帧，§13 时序项闭环）。实施中两处与原文的补充：(a) **视口首帧口径修订**——客户端初始化也不读 window（否则 hydration 首帧 ≠ 服务端），统一 {0,0} + layout effect 绘制前测量，断言口径同步改 §5/§7；(b) **React 18 fixture 实测发现 `AvatarBubble` 裸 `useLayoutEffect`（气泡测量）打 SSR 警告**，抽公共 `hooks/useIsoLayoutEffect` 三处统一（发现于代码落地后的 fixture 复验，本文档随后同步，顺序倒置在此如实记录）。另实测：pnpm 12.4.1 会把 `prepack` 从 tarball 的 `scripts` 剥掉（§8）。发布未执行——按 §11 需用户显式授权。
+>
+> **发布机制改版（2026-11-04，§11 被本节取代）**：0.1.0 已于 2026-09-29 由用户手动 `pnpm publish` 发布（本文档此前「发布未执行」「包名 404 可用」的记录就此过时——包名已由本人账号占用，且当时未打 tag、不在 GitHub 仓库内）。现改为 **打 `v*` tag 自动发布**，实测要点：① `.github/workflows/publish.yml`，`permissions: id-token: write` + GitHub 托管 runner；② **trusted publishing（OIDC）免 token，provenance 自动生成，无需 `--provenance`**（npm 文档确认），但 npmjs.com 需一次性配置 Trusted Publisher（owner `susususutie` / repo `react-float-avatar` / workflow `publish.yml`，2026-09-03 后新建配置默认只允许 stage，须显式 Allow `npm publish`；配置创建后 2 天内须完成首次发布）；③ **打包仍必须 pnpm（`vp pm pack`，`prepublishOnly` 已按 §2.1 改为 `prepack` 使 `pnpm pack` 也触发构建），上传改用 `npm publish <tarball>` 且必须在仓库外执行**——实测 npm 在本仓库被 `devEngines`（要求 pnpm）直接拒绝（`EBADDEVENGINES`），而 npm 不应用 `publishConfig.exports` 故不能从目录发布，发布 pnpm 打好的 tarball 两者皆避（tarball 内 `exports` 已由 pnpm 改写为 `./dist/index.mjs`，实测 `npm publish --dry-run <tarball>` 通过）；④ **不再使用 `pnpm publish`**（用户决定；且实测其 git 检查在 tag 的 detached HEAD 下报 `ERR_PNPM_GIT_UNKNOWN_BRANCH`，CI 场景需 `--no-git-checks` 才能过）；⑤ `repository`/`homepage`/`bugs` 已补（provenance/trusted publishing 要求 `repository.url` 与 GitHub 仓库精确匹配）；⑥ npm token 401 不再是阻断项（CI 免 token，本地无需登录）。
 
 ## 1. 决策总览
 
@@ -216,14 +218,15 @@ packages/react-float-avatar/src/hooks/useIsoLayoutEffect.ts  三处同构 layout
 对应 *.test.ts(x)                              新增断言（含 SSR / dist import / react@18 / 消费方 tsc）
 ```
 
-## 11. 发布流程（新增章节）
+## 11. 发布流程（2026-11-04 改为 tag 自动发布，旧的手动 `pnpm publish` 流程作废）
 
 1. 确认 §8 校验清单全部通过（tarball 在临时目录，工作区无 `.tgz` 残留）。
-2. 改 `package.json` `version`（遵循 semver；本次 `0.1.0`）。
-3. **提交版本改动，确认 `git status` 干净**（复审阻断项 4：pnpm 的 `ERR_PNPM_GIT_UNCLEAN` 把未跟踪文件也算不干净，未提交的改动或残留 tgz 都会卡住 publish；**不用 `--no-git-checks` 绕过**）。
-4. **`pnpm publish`（必须 pnpm，见 §2.1；`publishConfig.access: public` 已配置）——发布是外部可见动作，需用户显式授权后才执行，AI 不得自行发布。**
-5. 发布后打 git tag（`v0.1.0`）。
-6. 记录 changelog（本次可先在 README「Changelog」小节或 GitHub Release，待公开仓库确定后固化）。
+2. 改 `packages/react-float-avatar/package.json` `version`（遵循 semver）。
+3. 提交版本改动，确认 `git status` 干净。
+4. 打 tag `v<version>` 并推送：`git tag v0.2.0 && git push origin main v0.2.0`。
+5. **推 tag 即触发 `.github/workflows/publish.yml` 发布**（推送 tag 属外部可见动作，需用户显式授权；AI 不得自行推送 tag）。流程：tag 与 `package.json` 版本一致性校验 → `vp check` → `vp test` → `vp run -r build` → `vp pm pack`（prepack 构建）→ 仓库外 `npm publish <tarball>`（OIDC trusted publishing，provenance 自动生成）。
+6. 前置条件（一次性）：npmjs.com 包设置里配置 Trusted Publisher（GitHub Actions / `susususutie` / `react-float-avatar` / `publish.yml`，须 Allow `npm publish`，配置后 2 天内完成首发）；GitHub 仓库 `susususutie/react-float-avatar` 需公开（provenance 不支持私有仓库）。
+7. 发布后：确认 npm 页面出现 provenance 徽章；`v0.1.0` 历史 tag 补打在 `622308e`（0.1.0 实际发布时的提交，README 与 tarball 实测一致）。
 
 ## 12. 已知限制（写入 README，本次不做）
 

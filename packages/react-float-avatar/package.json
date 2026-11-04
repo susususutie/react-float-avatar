@@ -1,6 +1,6 @@
 {
   "name": "react-float-avatar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "可拖拽的浮动 AI 头像：边缘锚定 + 四角吸附 + 消息气泡 + 红点角标（React + antd）",
   "keywords": [
     "antd",
@@ -12,7 +12,15 @@
     "floating",
     "react"
   ],
+  "homepage": "https://github.com/susususutie/react-float-avatar#readme",
+  "bugs": {
+    "url": "https://github.com/susususutie/react-float-avatar/issues"
+  },
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/susususutie/react-float-avatar.git"
+  },
   "files": [
     "dist"
   ],
@@ -34,7 +42,7 @@
     "build": "vp pack",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp pack"
+    "prepack": "vp pack"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
